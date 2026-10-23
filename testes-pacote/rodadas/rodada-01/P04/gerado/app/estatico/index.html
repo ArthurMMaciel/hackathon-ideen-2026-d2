@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Férias da equipe</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 1100px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+    section { margin-bottom: 24px; }
+    form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+    label { display: flex; flex-direction: column; font-size: 0.9em; }
+    button { margin-right: 4px; }
+    .vazio { color: #888; }
+  </style>
+</head>
+<body>
+  <h1>Férias da equipe</h1>
+  <p id="status" role="status">Carregando...</p>
+
+  <section>
+    <h2>Solicitar férias</h2>
+    <form id="form-solicitar">
+      <label>Colaborador <select id="colaborador" required></select></label>
+      <label>Início <input type="date" id="inicio" required></label>
+      <label>Fim <input type="date" id="fim" required></label>
+      <button type="submit">Solicitar</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Solicitações</h2>
+    <table>
+      <thead><tr><th>#</th><th>Colaborador</th><th>Equipe</th><th>Início</th><th>Fim</th><th>Dias</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody id="tabela-solicitacoes"></tbody>
+    </table>
+    <h3>Saldo dos colaboradores</h3>
+    <table>
+      <thead><tr><th>Nome</th><th>Equipe</th><th>Saldo</th><th>Saldo disponível</th></tr></thead>
+      <tbody id="tabela-colaboradores"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Calendário do mês</h2>
+    <form id="form-calendario">
+      <label>Mês <input type="month" id="mes" required></label>
+      <button type="submit">Ver</button>
+    </form>
+    <table>
+      <thead><tr><th>Dia</th><th>DADOS</th><th>PRODUTO</th><th>SUPORTE</th></tr></thead>
+      <tbody id="tabela-calendario"></tbody>
+    </table>
+  </section>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    const EQUIPES = ["DADOS", "PRODUTO", "SUPORTE"];
+
+    function mostrar(texto, erro = false) {
+      const el = document.getElementById("status");
+      el.textContent = texto;
+      el.className = erro ? "erro" : "ok";
+    }
+
+    function celula(linha, texto) {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      linha.appendChild(td);
+      return td;
+    }
+
+    function limpar(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+
+    async function carregarColaboradores() {
+      const lista = await api("/api/colaboradores");
+      const select = document.getElementById("colaborador");
+      const atual = select.value;
+      limpar(select);
+      const corpo = document.getElementById("tabela-colaboradores");
+      limpar(corpo);
+      for (const c of lista) {
+        const op = document.createElement("option");
+        op.value = c.id;
+        op.textContent = c.nome + " (" + c.equipe + ")";
+        select.appendChild(op);
+        const tr = document.createElement("tr");
+        celula(tr, c.nome); celula(tr, c.equipe); celula(tr, c.saldo); celula(tr, c.saldo_disponivel);
+        corpo.appendChild(tr);
+      }
+      if (atual) select.value = atual;
+    }
+
+    async function executar(id, acao, rotulo) {
+      try {
+        await api("/api/solicitacoes/" + id + "/" + acao, { method: "POST" });
+        mostrar("Solicitação " + id + " " + rotulo + ".");
+        await atualizarTudo();
+      } catch (e) {
+        mostrar("Não foi possível: " + e.message, true);
+      }
+    }
+
+    function botao(td, texto, id, acao, rotulo) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = texto;
+      b.addEventListener("click", () => executar(id, acao, rotulo));
+      td.appendChild(b);
+    }
+
+    async function carregarSolicitacoes() {
+      const lista = await api("/api/solicitacoes");
+      const corpo = document.getElementById("tabela-solicitacoes");
+      limpar(corpo);
+      if (lista.length === 0) {
+        const tr = document.createElement("tr");
+        const td = celula(tr, "Nenhuma solicitação.");
+        td.colSpan = 8; td.className = "vazio";
+        corpo.appendChild(tr);
+      }
+      for (const s of lista) {
+        const tr = document.createElement("tr");
+        celula(tr, s.id); celula(tr, s.colaborador_nome); celula(tr, s.equipe);
+        celula(tr, s.inicio); celula(tr, s.fim); celula(tr, s.dias); celula(tr, s.situacao);
+        const acoes = celula(tr, "");
+        if (s.situacao === "SOLICITADA") {
+          botao(acoes, "Aprovar", s.id, "aprovar", "aprovada");
+          botao(acoes, "Reprovar", s.id, "reprovar", "reprovada");
+        }
+        if (s.situacao === "SOLICITADA" || s.situacao === "APROVADA") {
+          botao(acoes, "Cancelar", s.id, "cancelar", "cancelada");
+        }
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function carregarCalendario() {
+      const mes = document.getElementById("mes").value;
+      if (!mes) return;
+      const cal = await api("/api/calendario?mes=" + encodeURIComponent(mes));
+      const corpo = document.getElementById("tabela-calendario");
+      limpar(corpo);
+      for (const dia of cal.dias) {
+        const tr = document.createElement("tr");
+        celula(tr, dia.data);
+        for (const eq of EQUIPES) {
+          const nomes = dia.equipes[eq].map((p) => p.nome).join(", ");
+          const td = celula(tr, nomes || "—");
+          if (!nomes) td.className = "vazio";
+        }
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function atualizarTudo() {
+      await Promise.all([carregarColaboradores(), carregarSolicitacoes(), carregarCalendario()]);
+    }
+
+    document.getElementById("form-solicitar").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const corpo = {
+        colaborador_id: Number(document.getElementById("colaborador").value),
+        inicio: document.getElementById("inicio").value,
+        fim: document.getElementById("fim").value,
+      };
+      try {
+        const s = await api("/api/solicitacoes", { method: "POST", body: JSON.stringify(corpo) });
+        mostrar("Solicitação " + s.id + " criada (" + s.dias + " dias).");
+        await atualizarTudo();
+      } catch (e) {
+        mostrar("Não foi possível solicitar: " + e.message, true);
+      }
+    });
+
+    document.getElementById("form-calendario").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try { await carregarCalendario(); } catch (e) { mostrar("Erro no calendário: " + e.message, true); }
+    });
+
+    const hoje = new Date();
+    document.getElementById("mes").value = hoje.getFullYear() + "-" + String(hoje.getMonth() + 1).padStart(2, "0");
+
+    api("/api/saude")
+      .then(atualizarTudo)
+      .then(() => mostrar("API disponível."))
+      .catch((e) => mostrar("Erro: " + e.message, true));
+  </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inscrição em treinamentos</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    form { display: grid; gap: 8px; max-width: 480px; margin-bottom: 16px; }
+    label { display: grid; gap: 4px; }
+    section { margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <h1>Inscrição em treinamentos</h1>
+  <p id="status">Carregando...</p>
+
+  <section>
+    <h2>Turmas futuras</h2>
+    <table>
+      <thead>
+        <tr><th>Título</th><th>Início</th><th>Duração (min)</th><th>Modalidade</th><th>Vagas</th><th>Vagas restantes</th><th></th></tr>
+      </thead>
+      <tbody id="turmas"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Inscrever-se</h2>
+    <form id="form-inscricao">
+      <label>Turma <select id="turma" required></select></label>
+      <label>Nome <input id="nome" maxlength="200" required></label>
+      <label>E-mail <input id="email" type="email" maxlength="254" required></label>
+      <button type="submit">Inscrever</button>
+    </form>
+    <p id="resultado-inscricao"></p>
+  </section>
+
+  <section>
+    <h2>Inscritos <span id="titulo-inscritos"></span></h2>
+    <table>
+      <thead>
+        <tr><th>Nome</th><th>E-mail</th><th>Situação</th><th>Posição na espera</th></tr>
+      </thead>
+      <tbody id="inscritos"></tbody>
+    </table>
+    <p id="resultado-inscritos">Escolha "Ver inscritos" numa turma.</p>
+  </section>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    const $ = (id) => document.getElementById(id);
+
+    function celula(linha, texto) {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      linha.appendChild(td);
+      return td;
+    }
+
+    function formatarData(iso) {
+      return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+    }
+
+    function mostrar(elemento, texto, classe) {
+      elemento.textContent = texto;
+      elemento.className = classe || "";
+    }
+
+    async function carregarTurmas() {
+      const turmas = await api("/api/turmas");
+      const corpo = $("turmas");
+      const selecao = $("turma");
+      const escolhida = selecao.value;
+      corpo.replaceChildren();
+      selecao.replaceChildren();
+      for (const t of turmas) {
+        const linha = document.createElement("tr");
+        celula(linha, t.titulo);
+        celula(linha, formatarData(t.inicio));
+        celula(linha, String(t.duracao_minutos));
+        celula(linha, t.modalidade);
+        celula(linha, String(t.vagas));
+        celula(linha, String(t.vagas_restantes));
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.textContent = "Ver inscritos";
+        botao.addEventListener("click", () => carregarInscritos(t.id, t.titulo));
+        celula(linha, "").appendChild(botao);
+        corpo.appendChild(linha);
+
+        const opcao = document.createElement("option");
+        opcao.value = String(t.id);
+        opcao.textContent = t.titulo + " (" + formatarData(t.inicio) + ")";
+        selecao.appendChild(opcao);
+      }
+      if (escolhida) selecao.value = escolhida;
+      mostrar($("status"), turmas.length ? "" : "Nenhuma turma futura.");
+    }
+
+    async function carregarInscritos(turmaId, titulo) {
+      try {
+        const inscritos = await api("/api/turmas/" + turmaId + "/inscricoes");
+        $("titulo-inscritos").textContent = "· " + titulo;
+        const corpo = $("inscritos");
+        corpo.replaceChildren();
+        for (const i of inscritos) {
+          const linha = document.createElement("tr");
+          celula(linha, i.nome);
+          celula(linha, i.email);
+          celula(linha, i.situacao);
+          celula(linha, i.posicao_espera === null ? "" : String(i.posicao_espera));
+          corpo.appendChild(linha);
+        }
+        mostrar($("resultado-inscritos"), inscritos.length ? "" : "Nenhum inscrito nesta turma.");
+      } catch (e) {
+        mostrar($("resultado-inscritos"), "Erro: " + e.message, "erro");
+      }
+    }
+
+    $("form-inscricao").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const turmaId = $("turma").value;
+      try {
+        const inscricao = await api("/api/turmas/" + turmaId + "/inscricoes", {
+          method: "POST",
+          body: JSON.stringify({ nome: $("nome").value, email: $("email").value }),
+        });
+        const texto = inscricao.situacao === "ESPERA"
+          ? "Inscrição em ESPERA, posição " + inscricao.posicao_espera + " na fila."
+          : "Inscrição " + inscricao.situacao + ".";
+        mostrar($("resultado-inscricao"), texto, "ok");
+        await carregarTurmas();
+      } catch (e) {
+        mostrar($("resultado-inscricao"), "Erro: " + e.message, "erro");
+      }
+    });
+
+    carregarTurmas().catch((e) => mostrar($("status"), "Erro: " + e.message, "erro"));
+  </script>
+</body>
+</html>

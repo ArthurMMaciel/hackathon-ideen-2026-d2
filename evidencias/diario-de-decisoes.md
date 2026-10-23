@@ -138,6 +138,23 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Iniciou a primeira execução completa num subagente com contexto limpo, num diretório só com `skills/` e `PEDIDO.md`, usando o prompt exato da banca.
 - **[D]** Resultado em análise. *(Pendente)*
 
+## D-14 · Rodada 01: cinco pedidos novos em paralelo
+
+- **[P]** Viu a tela gerada pela execução em andamento e questionou a qualidade e a origem dela. Depois pediu cerca de 5 testes novos, rodados por subagentes, com pedidos e resultados salvos, para melhorar o pacote a partir dos resultados.
+- **[IA]** Confirmou que a tela veio da execução completa (gates 1 a 4 aprovados naquele momento). Avaliação crítica da tela: funcional e com XSS bloqueado, mas visual cru, tabela que transborda e um "Failed to fetch" provavelmente causado pelo servidor sendo derrubado pela verificação.
+- **[IA]** Escreveu 5 pedidos novos em `testes-pacote/pedidos/`, cada um forçando um tipo de regra diferente: estado de item e limites por tipo (P01), dinheiro e fluxo de aprovação (P02), lista de espera (P03), datas sem horário e restrição por equipe (P04), prazo em horas e máquina de estados (P05).
+- **[IA]** Corrigiu o harness de verificação, que usava a porta fixa 8765 e colidiria em execuções paralelas. Agora escolhe uma porta livre. Testado.
+- **[IA]** Commit `31c3c44` enviado. O GitHub avisou que a `main` exige pull request e que a regra foi contornada pela permissão da conta. Daqui em diante, nada vai direto para a `main` sem decisão do participante.
+- **[IA]** Disparou as 5 execuções em subagentes paralelos, cada uma num diretório limpo e com o prompt da banca.
+- **[D]** Rodada 01 em andamento: P00 (treino) mais P01 a P05. *(Decidido por: participante)*
+
+## D-15 · Resultado da rodada 01 e melhorias propostas
+
+- **[IA]** As seis execuções terminaram: 36/36 gates, 390/390 testes, 60/60 critérios de aceite verificados via HTTP e nenhum ajuste manual. Artefatos e relatos em `testes-pacote/rodadas/rodada-01/`.
+- **[IA]** Cruzou os relatos dos seis agentes e montou a matriz de recorrência em `testes-pacote/rodadas/rodada-01/RESULTADOS.md`. Seis problemas apareceram em todas as execuções; quatro deles foram causados pelo modelo de projeto escrito pela IA (ver E-05 a E-08).
+- **[IA]** Propôs 12 melhorias (M1 a M12), ordenadas por impacto. Não aplicadas, aguardando o participante.
+- **[D]** Aguardando decisão do participante. *(Pendente)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
@@ -147,4 +164,9 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 | E-01 | Proposta de stack (D-04) | A IA apresentou as opções de stack como escolha entre "Python" e "Node" sem deixar claro que ambas incluíam a tela web. A apresentação levou o participante a entender que poderia ser só API. | O participante questionou. A IA refez a explicação com uma tabela por camada (API, banco, testes, tela) e explicitou que a tela é requisito do pedido. |
 | E-02 | Skill `concepcao` (D-09) | A IA fixou "cerca de 60 linhas" para o PRD sem conferir contra o próprio modelo de 9 seções em tabela. Num pedido pequeno o PRD já passa de 70 linhas. | Detectado na calibração 01. Correção proposta em D-10. |
 | E-03 | Skills `fabrica` e `concepcao` | A IA escreveu dois gates diferentes para a mesma etapa (4 itens na `fabrica`, 7 na `concepcao`), sem dizer qual vale. | Detectado na calibração 01. Correção proposta em D-10. |
-| E-04 | Skill `concepcao` | O item de gate "toda lacuna virou premissa" depende só do julgamento do agente, então não pode ser verificado. | Detectado na calibração 01. Correção proposta em D-10. |
+| E-04 | Skill `concepcao` | O item de gate "toda lacuna virou premissa" depende só do julgamento do agente, então não pode ser verificado. | Detectado na calibração 01. Corrigido em D-11 com a tabela de lacunas no log. |
+| E-05 | Modelo de projeto | A IA serviu a tela com `FileResponse`, exposto à CVE-2025-62727 na versão fixada do starlette, e fixou versões com CVEs conhecidas sem rodar `pip-audit` antes. | As seis execuções da rodada 01 acharam e contornaram o problema sozinhas. Correção proposta em M1 e M2. |
+| E-06 | Modelo de projeto | A IA não limitou ids nem anos, e o SQLite e a conversão para UTC geram HTTP 500 com valores extremos. | Achado pela revisão em todas as execuções. Correção proposta em M3. |
+| E-07 | Modelo de projeto e skill `revisao` | A IA colocou as exceções de negócio num módulo que importa FastAPI e, na revisão, exigiu domínio sem FastAPI. As duas instruções se contradizem. | Apontado em todas as execuções. Correção proposta em M4. |
+| E-08 | Skill `construcao` | A IA exigiu TDD um teste por vez, caro demais e impossível de verificar no gate. Nenhum agente seguiu. | Correção proposta em M7: lote de testes com rodada de falhas registrada. |
+| E-09 | Pedido de teste P04 | A IA escreveu um pedido com regras de saldo que se contradizem. | O agente da execução percebeu e resolveu com premissa e teste. Motivou a lacuna nova de M12. |
