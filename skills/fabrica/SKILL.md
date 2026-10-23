@@ -47,7 +47,7 @@ As skills das etapas ficam ao lado desta, em `../<nome-da-skill>/SKILL.md`. Se o
 
 ## Encerramento
 
-1. Escreva `gerado/README.md` com: o que o sistema faz, como instalar, como rodar, como testar e onde está a tela.
+1. Confira `gerado/README.md` (escrito na construção): o que o sistema faz, como instalar, rodar, testar e verificar, e onde está a tela.
 2. Feche o log com o quadro final: gates (aprovado ou falhou), testes (passaram/total), critérios de aceite (verificados/total), ajustes manuais (deve ser "nenhum") e pendências.
 3. Responda ao usuário com o mesmo quadro final, em poucas linhas.
 

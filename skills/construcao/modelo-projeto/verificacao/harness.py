@@ -1,6 +1,7 @@
 """Sobe o servidor real com relógio fixo e registra cada verificação feita via HTTP."""
 
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -11,7 +12,16 @@ from pathlib import Path
 import httpx
 
 RAIZ = Path(__file__).resolve().parent.parent  # gerado/
-PORTA = int(os.environ.get("VERIFICACAO_PORTA", "8765"))
+
+
+def _porta_livre() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+# Porta livre escolhida pelo sistema, para execuções em paralelo não colidirem.
+PORTA = int(os.environ.get("VERIFICACAO_PORTA") or _porta_livre())
 
 
 @contextmanager

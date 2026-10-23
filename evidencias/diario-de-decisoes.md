@@ -126,6 +126,18 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Confirmou que o repositório ainda não existia na organização e o criou como privado, com o nome do padrão do desafio, `ideen-tech/hackathon-2026-d2-arthurmm3-ideentech`.
 - **[D]** Repositório criado e primeiro commit enviado. A discussão sobre o banco fica pendente. *(Decidido por: participante)*
 
+## D-13 · Skills restantes e primeira execução completa
+
+- **[IA]** Escreveu as skills `especificacao` (com `modelo-spec.md`), `construcao`, `revisao`, `revisao-seguranca` e `verificacao`. Atualizou `stack-padrao.md` para tornar obrigatório partir do modelo de projeto.
+- **[IA]** Escolhas da IA nessas skills:
+  1. **Testes antes do código:** um teste por linha do plano, rodado antes de implementar.
+  2. **Divisão fixa do código:** `dominio/` (regras puras, recebem `agora`), `repositorio/` (SQL), `rotas/` (HTTP).
+  3. **Verificação contra o servidor real**, com o tempo "passando" por reinício do servidor com outro `APP_AGORA`.
+  4. **Segurança com testes de ataque** (injeção de SQL, XSS, entrada fora do limite) que ficam na suíte.
+  5. **`pip-audit` opcional:** sem rede, a execução registra o motivo e segue.
+- **[IA]** Iniciou a primeira execução completa num subagente com contexto limpo, num diretório só com `skills/` e `PEDIDO.md`, usando o prompt exato da banca.
+- **[D]** Resultado em análise. *(Pendente)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
