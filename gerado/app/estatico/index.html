@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reserva de salas</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 1080px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    fieldset { margin-bottom: 16px; }
+    label { display: inline-block; margin: 4px 12px 4px 0; }
+    .cancelada { color: #777; text-decoration: line-through; }
+    #aviso { min-height: 1.4em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Reserva de salas</h1>
+  <p id="status">Carregando...</p>
+  <p id="aviso" role="status"></p>
+
+  <fieldset>
+    <legend>Nova reserva</legend>
+    <form id="form-reserva">
+      <label>Sala <select id="r-sala" required></select></label>
+      <label>Responsável <input id="r-nome" required maxlength="200"></label>
+      <label>E-mail <input id="r-email" type="email" required maxlength="254"></label>
+      <label>Título <input id="r-titulo" required maxlength="200"></label>
+      <label>Participantes <input id="r-participantes" type="number" min="1" value="1" required></label>
+      <label>Data <input id="r-data" type="date" required></label>
+      <label>Início <input id="r-inicio" type="time" required value="10:00"></label>
+      <label>Fim <input id="r-fim" type="time" required value="11:00"></label>
+      <button type="submit">Reservar</button>
+    </form>
+  </fieldset>
+
+  <fieldset>
+    <legend>Salas livres</legend>
+    <form id="form-livres">
+      <label>Data <input id="l-data" type="date" required></label>
+      <label>Início <input id="l-inicio" type="time" required value="10:00"></label>
+      <label>Fim <input id="l-fim" type="time" required value="11:00"></label>
+      <label>Local
+        <select id="l-local">
+          <option value="">Todos</option>
+          <option value="SAO_PAULO">SAO_PAULO</option>
+          <option value="ARARAQUARA">ARARAQUARA</option>
+          <option value="COWORKING">COWORKING</option>
+        </select>
+      </label>
+      <label>Capacidade mínima <input id="l-capacidade" type="number" min="1"></label>
+      <button type="submit">Buscar</button>
+    </form>
+    <ul id="lista-livres"></ul>
+  </fieldset>
+
+  <fieldset>
+    <legend>Agenda do dia por sala</legend>
+    <label>Data <input id="a-data" type="date"></label>
+    <button type="button" id="a-atualizar">Atualizar</button>
+    <div id="agenda"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Ocupação do dia (08:00–18:00, só reservas ativas)</legend>
+    <table>
+      <thead><tr><th>Sala</th><th>Local</th><th>Minutos ocupados</th><th>Taxa (%)</th></tr></thead>
+      <tbody id="ocupacao"></tbody>
+    </table>
+  </fieldset>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    const OFFSET = "-03:00"; // PR-01: fuso America/Sao_Paulo
+    const $ = (id) => document.getElementById(id);
+    let salas = [];
+
+    function avisar(texto, erro) {
+      $("aviso").textContent = texto;
+      $("aviso").className = erro ? "erro" : "ok";
+    }
+
+    function celula(linha, texto) {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      linha.appendChild(td);
+      return td;
+    }
+
+    function hora(iso) { return iso.slice(11, 16); }
+    function hojeLocal() {
+      const d = new Date();
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    }
+
+    async function carregarSalas() {
+      salas = await api("/api/salas");
+      const select = $("r-sala");
+      select.replaceChildren();
+      for (const s of salas) {
+        const opcao = document.createElement("option");
+        opcao.value = s.id;
+        opcao.textContent = `${s.nome} (${s.local}, ${s.capacidade} lugares)`;
+        select.appendChild(opcao);
+      }
+    }
+
+    async function carregarAgenda() {
+      const data = $("a-data").value;
+      const reservas = await api("/api/reservas?" + new URLSearchParams({ data }));
+      const agenda = $("agenda");
+      agenda.replaceChildren();
+      for (const s of salas) {
+        const titulo = document.createElement("h3");
+        titulo.textContent = `${s.nome} · ${s.local} · ${s.capacidade} lugares`;
+        agenda.appendChild(titulo);
+        const daSala = reservas.filter((r) => r.sala_id === s.id);
+        if (daSala.length === 0) {
+          const p = document.createElement("p");
+          p.textContent = "Sem reservas neste dia.";
+          agenda.appendChild(p);
+          continue;
+        }
+        const tabela = document.createElement("table");
+        const cab = tabela.insertRow();
+        for (const t of ["Horário", "Título", "Responsável", "Participantes", "Status", "Ação"]) {
+          const th = document.createElement("th");
+          th.textContent = t;
+          cab.appendChild(th);
+        }
+        for (const r of daSala) {
+          const linha = tabela.insertRow();
+          if (r.status === "CANCELADA") linha.className = "cancelada";
+          celula(linha, `${hora(r.inicio)}–${hora(r.fim)}`);
+          celula(linha, r.titulo);
+          celula(linha, `${r.responsavel_nome} <${r.responsavel_email}>`);
+          celula(linha, String(r.participantes));
+          celula(linha, r.status);
+          const acao = celula(linha, "");
+          if (r.status === "ATIVA") {
+            const botao = document.createElement("button");
+            botao.type = "button";
+            botao.textContent = "Cancelar";
+            botao.addEventListener("click", () => cancelar(r.id));
+            acao.appendChild(botao);
+          }
+        }
+        agenda.appendChild(tabela);
+      }
+      await carregarOcupacao(data);
+    }
+
+    async function carregarOcupacao(data) {
+      const rel = await api("/api/relatorios/ocupacao?" + new URLSearchParams({ data }));
+      const corpo = $("ocupacao");
+      corpo.replaceChildren();
+      for (const s of rel.salas) {
+        const linha = corpo.insertRow();
+        celula(linha, s.nome);
+        celula(linha, s.local);
+        celula(linha, String(s.minutos_ocupados));
+        celula(linha, s.taxa_ocupacao.toFixed(1));
+      }
+    }
+
+    async function cancelar(id) {
+      try {
+        await api(`/api/reservas/${id}/cancelar`, { method: "POST" });
+        avisar("Reserva cancelada.", false);
+        await carregarAgenda();
+      } catch (e) { avisar("Erro: " + e.message, true); }
+    }
+
+    $("form-reserva").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const data = $("r-data").value;
+      const corpo = {
+        sala_id: Number($("r-sala").value),
+        responsavel_nome: $("r-nome").value,
+        responsavel_email: $("r-email").value,
+        titulo: $("r-titulo").value,
+        participantes: Number($("r-participantes").value),
+        inicio: `${data}T${$("r-inicio").value}:00${OFFSET}`,
+        fim: `${data}T${$("r-fim").value}:00${OFFSET}`,
+      };
+      try {
+        const r = await api("/api/reservas", { method: "POST", body: JSON.stringify(corpo) });
+        avisar(`Reserva ${r.id} criada com status ${r.status}.`, false);
+        $("a-data").value = data;
+        await carregarAgenda();
+      } catch (e) { avisar("Erro: " + e.message, true); }
+    });
+
+    $("form-livres").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const data = $("l-data").value;
+      const params = new URLSearchParams({
+        inicio: `${data}T${$("l-inicio").value}:00${OFFSET}`,
+        fim: `${data}T${$("l-fim").value}:00${OFFSET}`,
+      });
+      if ($("l-local").value) params.set("local", $("l-local").value);
+      if ($("l-capacidade").value) params.set("capacidade_minima", $("l-capacidade").value);
+      const lista = $("lista-livres");
+      lista.replaceChildren();
+      try {
+        const livres = await api("/api/salas/livres?" + params);
+        if (livres.length === 0) {
+          const li = document.createElement("li");
+          li.textContent = "Nenhuma sala livre com esses filtros.";
+          lista.appendChild(li);
+        }
+        for (const s of livres) {
+          const li = document.createElement("li");
+          li.textContent = `${s.nome} · ${s.local} · ${s.capacidade} lugares · ${s.recursos.join(", ") || "sem recursos"}`;
+          lista.appendChild(li);
+        }
+        avisar("", false);
+      } catch (e) { avisar("Erro: " + e.message, true); }
+    });
+
+    $("a-atualizar").addEventListener("click", () => carregarAgenda().catch((e) => avisar("Erro: " + e.message, true)));
+    $("a-data").addEventListener("change", () => carregarAgenda().catch((e) => avisar("Erro: " + e.message, true)));
+
+    for (const id of ["r-data", "l-data", "a-data"]) $(id).value = hojeLocal();
+
+    api("/api/saude")
+      .then(() => { $("status").textContent = "API disponível."; })
+      .then(carregarSalas)
+      .then(carregarAgenda)
+      .catch((e) => { $("status").textContent = "Erro: " + e.message; });
+  </script>
+</body>
+</html>
