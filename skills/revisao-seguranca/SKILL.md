@@ -17,7 +17,7 @@ Objetivo: garantir que o sistema não tem as falhas mais comuns de uma aplicaç�
 ## Checklist
 
 **Injeção de SQL**
-- [ ] Procure SQL montado com f-string, `%`, `.format` ou `+` em `app/`: `grep -rnE "execute\(f|execute\(.*%|execute\(.*\.format|execute\(.*\+" app/`. Resultado esperado: nada.
+- [ ] Procure SQL montado com f-string, `%`, `.format` ou `+` em `app/`: `grep -rnE "execute\(f|execute\(.*%|execute\(.*\.format|execute\(.*\+" app/`. Cada ocorrência precisa ser só composição de constantes de módulo, sem nenhum dado de entrada; registre cada uma com a justificativa. Dado de entrada só entra por parâmetro `?`.
 - [ ] Teste: enviar `'; DROP TABLE x; --` em todo campo de texto de criação e em parâmetros de consulta. Esperado: dado gravado literalmente ou 4xx; tabelas intactas (listagem continua funcionando).
 
 **XSS na tela**
@@ -35,11 +35,11 @@ Objetivo: garantir que o sistema não tem as falhas mais comuns de uma aplicaç�
 **Segredos e dados**
 - [ ] Procure segredos em `gerado/` e `evidencias/`: `grep -rniE "(password|senha|secret|token|api[_-]?key)\s*[:=]" gerado/ evidencias/ --exclude-dir=.venv`. Resultado esperado: nada.
 - [ ] Dados iniciais e de teste são fictícios.
-- [ ] `gerado/dados/` e `.venv/` estão no `.gitignore` do repositório.
+- [ ] `gerado/.gitignore` (vem do modelo) contém `.venv/`, `dados/` e `.tmp/`.
 
 **Dependências**
-- [ ] Todas as versões estão fixadas em `requirements.txt`.
-- [ ] Tente `PY -m pip install pip-audit` e `PY -m pip_audit -r requirements.txt`. Se rodar, registre a saída e trate vulnerabilidades altas. Se não houver rede, registre "não executado: sem rede" e siga. Não instale `pip-audit` no `requirements.txt`.
+- [ ] Todas as versões, inclusive transitivas, estão fixadas em `requirements.txt` (vem do modelo).
+- [ ] Rode `PY -m pip install pip-audit` e, com `PYTHONIOENCODING=utf-8`, `PY -m pip_audit -r requirements.txt -f json -o .tmp/pip-audit.json`. Copie o resumo para a evidência. O esperado com a stack do modelo é nenhuma vulnerabilidade. Se aparecer alguma: atualize a versão afetada para a menor versão corrigida que mantenha `pip check` e a suíte passando; se não houver versão corrigida, mitigue no código e registre. Sem rede, registre "não executado: sem rede" e siga. Não coloque `pip-audit` no `requirements.txt`.
 
 **Exposição**
 - [ ] O servidor sobe em `127.0.0.1` (padrão do uvicorn). Sem CORS liberado para `*`.

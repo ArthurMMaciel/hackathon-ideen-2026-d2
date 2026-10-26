@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Request
@@ -35,18 +36,22 @@ def transacao(conn: sqlite3.Connection):
         raise
 
 
-def carga_inicial(conn: sqlite3.Connection) -> None:
-    """Dados iniciais fictícios. Idempotente: só insere quando a tabela está vazia."""
+def carga_inicial(conn: sqlite3.Connection, agora: datetime) -> None:
+    """Dados iniciais fictícios. Idempotente: só insere quando a tabela está vazia.
+
+    Datas relativas ("futura", "atrasado", "há 3 dias") são calculadas a partir de `agora`,
+    que é o relógio de teste nos testes e APP_AGORA ou a hora real no servidor.
+    """
 
 
-def iniciar(caminho: str) -> None:
+def iniciar(caminho: str, agora: datetime) -> None:
     Path(caminho).parent.mkdir(parents=True, exist_ok=True)
     conn = conectar(caminho)
     try:
         with transacao(conn):
             for ddl in ESQUEMA:
                 conn.execute(ddl)
-            carga_inicial(conn)
+            carga_inicial(conn, agora)
     finally:
         conn.close()
 

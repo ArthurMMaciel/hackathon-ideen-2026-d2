@@ -14,6 +14,8 @@ Você vai levar um pedido em linguagem natural até um sistema funcionando, perc
 3. **Tudo que é gerado fica em `gerado/`.** Evidências ficam em `evidencias/`. Não altere `skills/` nem o arquivo do pedido.
 4. **Leia as referências antes da etapa 1:** [referencias/regras-transversais.md](referencias/regras-transversais.md) e [referencias/stack-padrao.md](referencias/stack-padrao.md). Elas valem para todas as etapas.
 5. **Só dados fictícios.** Nenhum segredo, senha ou token real em código, configuração ou log.
+6. **Não escreva nada fora da pasta de trabalho** (a que contém o pedido). Arquivos temporários e sondas vão em `gerado/.tmp/`, que já está no `.gitignore`. Use caminhos relativos a essa pasta.
+7. **Horários do log vêm do relógio, nunca de estimativa.** No início e no fim de cada etapa rode `python -c "from datetime import datetime; print(datetime.now().strftime('%H:%M'))"` e copie a saída.
 
 ## Etapa 0 · Preparação
 

@@ -31,19 +31,21 @@ Objetivo: encontrar o que a construção deixou passar e corrigir antes da verif
 - [ ] Toda regra com limite tem teste no limite, abaixo e acima.
 - [ ] Regras de tempo usam o `relogio` de teste; nenhum teste depende da hora real.
 
-**Erros**
-- [ ] Entradas inválidas comuns (campo faltando, tipo errado, id inexistente, data sem fuso) retornam 4xx, nunca 500. Teste pelo menos um caso de cada.
-- [ ] Erros de negócio no formato `{"erro", "mensagem"}`, com mensagem em português.
+**Erros e valores extremos**
+- [ ] Entradas inválidas comuns (campo faltando, tipo errado, id inexistente) retornam 4xx, nunca 500.
+- [ ] Sonde cada endpoint com valores extremos e registre o resultado: id `99999999999999999999`, ano `9999` e `0001`, texto só com espaços, texto com 5000 caracteres, número negativo, dígitos Unicode (`１２`). Todos 4xx. Campos com os tipos de `app/tipos.py` já cobrem a maioria; confira os que não usam.
+- [ ] Erros de negócio no formato `{"erro", "mensagem"}`, com mensagem em português e status pela regra 409 ou 422 das regras transversais.
 
 **Estrutura**
-- [ ] `app/dominio/` não importa FastAPI nem `sqlite3`.
+- [ ] `app/dominio/` não importa `fastapi` nem `sqlite3` (confira os imports diretos dos arquivos).
 - [ ] SQL só em `app/repositorio/` (e DDL em `app/banco.py`).
-- [ ] Nenhum `datetime.now()` fora de `app/relogio.py`.
+- [ ] Nenhum `datetime.now()` em `app/` fora de `app/relogio.py`.
 - [ ] Escritas que dependem de leitura estão dentro de `banco.transacao`.
+- [ ] Dados iniciais com datas relativas usam o `agora` recebido por `carga_inicial`.
 
 **Tela**
 - [ ] Executa as ações que a SPEC lista e mostra a mensagem de erro da API.
-- [ ] Abre sem erro de JavaScript (confira se os IDs usados no script existem no HTML).
+- [ ] Conferência sem navegador, suficiente para o gate: todo `getElementById` e `querySelector` do script aponta para um elemento que existe no HTML; o script extraído passa em `node --check` (se o Node existir); cada endpoint que a tela chama responde via HTTP com os parâmetros que a tela envia.
 
 ## Gate da revisão
 

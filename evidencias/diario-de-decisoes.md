@@ -153,7 +153,28 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** As seis execuções terminaram: 36/36 gates, 390/390 testes, 60/60 critérios de aceite verificados via HTTP e nenhum ajuste manual. Artefatos e relatos em `testes-pacote/rodadas/rodada-01/`.
 - **[IA]** Cruzou os relatos dos seis agentes e montou a matriz de recorrência em `testes-pacote/rodadas/rodada-01/RESULTADOS.md`. Seis problemas apareceram em todas as execuções; quatro deles foram causados pelo modelo de projeto escrito pela IA (ver E-05 a E-08).
 - **[IA]** Propôs 12 melhorias (M1 a M12), ordenadas por impacto. Não aplicadas, aguardando o participante.
-- **[D]** Aguardando decisão do participante. *(Pendente)*
+- **[P]** Aprovou as 12 melhorias e pediu a rodada 02 com os 6 pedidos em paralelo.
+- **[D]** M1 a M12 aprovadas. *(Decidido por: participante)*
+
+## D-16 · Melhorias M1 a M12 aplicadas (skills v2)
+
+- **[IA]** Às 07:14 de 26/10, alertou que o prazo é 09:00 do mesmo dia e que `gerado/` e o `README.md` final ainda não estavam no repositório. Criou a branch `rodada-02` para não enviar mais nada direto à `main`.
+- **[IA]** Modelo de projeto:
+  - **M1:** stack atualizada para fastapi 0.162.0, starlette 1.10.0, uvicorn 0.54.0, pytest 9.1.1, com todas as dependências transitivas fixadas. `pip-audit` no `requirements.txt`: nenhuma vulnerabilidade conhecida.
+  - **M2:** tela servida com `HTMLResponse`.
+  - **M3:** `app/tipos.py` com `Id`, `DataHora`, `Data`, `Texto`, `TextoLongo`, `Email` e `Centavos`.
+  - **M4:** erros de negócio movidos para `app/dominio/erros.py`, sem FastAPI.
+  - **M5:** `carga_inicial(conn, agora)`, com o ciclo de vida usando o mesmo relógio das rotas.
+  - **M9:** harness em porta livre e saída UTF-8, com `resumo()` dos campos conferidos e linhas ordenadas; novo `subida_manual.py`.
+  - **M11:** CSS e funções de tela prontas (`mostrarMensagem`, `lerFormulario`, `desenharTabela`).
+  - **Testes:** novos testes dos tipos e do relógio da carga inicial. O modelo passou com 12 testes, verificação e subida manual.
+- **[IA]** Skills e regras:
+  - **M6:** o pedido prevalece sobre as regras; seção de datas sem horário; teste de decisão 409 ou 422.
+  - **M7:** testes em lote, com a rodada de falhas registrada no log e exigida no gate.
+  - **M8:** proibição de escrever fora da pasta de trabalho; horários lidos do relógio.
+  - **M10:** checklists ajustados (valores extremos, conferência da tela sem navegador, grep de SQL, `.gitignore`, `pip-audit`).
+  - **M12:** lacunas novas na concepção e limite do PRD em 70 linhas de itens.
+- **[D]** Skills v2 prontas para a rodada 02. *(Decidido por: participante)*
 
 ---
 
