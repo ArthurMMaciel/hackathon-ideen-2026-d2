@@ -142,7 +142,7 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 
 - **[P]** Viu a tela gerada pela execução em andamento e questionou a qualidade e a origem dela. Depois pediu cerca de 5 testes novos, rodados por subagentes, com pedidos e resultados salvos, para melhorar o pacote a partir dos resultados.
 - **[IA]** Confirmou que a tela veio da execução completa (gates 1 a 4 aprovados naquele momento). Avaliação crítica da tela: funcional e com XSS bloqueado, mas visual cru, tabela que transborda e um "Failed to fetch" provavelmente causado pelo servidor sendo derrubado pela verificação.
-- **[IA]** Escreveu 5 pedidos novos em `testes-pacote/pedidos/`, cada um forçando um tipo de regra diferente: estado de item e limites por tipo (P01), dinheiro e fluxo de aprovação (P02), lista de espera (P03), datas sem horário e restrição por equipe (P04), prazo em horas e máquina de estados (P05).
+- **[IA]** Escreveu 5 pedidos novos em `evidencias/testes-pacote/pedidos/`, cada um forçando um tipo de regra diferente: estado de item e limites por tipo (P01), dinheiro e fluxo de aprovação (P02), lista de espera (P03), datas sem horário e restrição por equipe (P04), prazo em horas e máquina de estados (P05).
 - **[IA]** Corrigiu o harness de verificação, que usava a porta fixa 8765 e colidiria em execuções paralelas. Agora escolhe uma porta livre. Testado.
 - **[IA]** Commit `31c3c44` enviado. O GitHub avisou que a `main` exige pull request e que a regra foi contornada pela permissão da conta. Daqui em diante, nada vai direto para a `main` sem decisão do participante.
 - **[IA]** Disparou as 5 execuções em subagentes paralelos, cada uma num diretório limpo e com o prompt da banca.
@@ -150,8 +150,8 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 
 ## D-15 · Resultado da rodada 01 e melhorias propostas
 
-- **[IA]** As seis execuções terminaram: 36/36 gates, 390/390 testes, 60/60 critérios de aceite verificados via HTTP e nenhum ajuste manual. Artefatos e relatos em `testes-pacote/rodadas/rodada-01/`.
-- **[IA]** Cruzou os relatos dos seis agentes e montou a matriz de recorrência em `testes-pacote/rodadas/rodada-01/RESULTADOS.md`. Seis problemas apareceram em todas as execuções; quatro deles foram causados pelo modelo de projeto escrito pela IA (ver E-05 a E-08).
+- **[IA]** As seis execuções terminaram: 36/36 gates, 390/390 testes, 60/60 critérios de aceite verificados via HTTP e nenhum ajuste manual. Artefatos e relatos em `evidencias/testes-pacote/rodadas/rodada-01/`.
+- **[IA]** Cruzou os relatos dos seis agentes e montou a matriz de recorrência em `evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md`. Seis problemas apareceram em todas as execuções; quatro deles foram causados pelo modelo de projeto escrito pela IA (ver E-05 a E-08).
 - **[IA]** Propôs 12 melhorias (M1 a M12), ordenadas por impacto. Não aplicadas, aguardando o participante.
 - **[P]** Aprovou as 12 melhorias e pediu a rodada 02 com os 6 pedidos em paralelo.
 - **[D]** M1 a M12 aprovadas. *(Decidido por: participante)*
@@ -175,6 +175,14 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
   - **M10:** checklists ajustados (valores extremos, conferência da tela sem navegador, grep de SQL, `.gitignore`, `pip-audit`).
   - **M12:** lacunas novas na concepção e limite do PRD em 70 linhas de itens.
 - **[D]** Skills v2 prontas para a rodada 02. *(Decidido por: participante)*
+- **[IA]** Preparou a entrega como rede de segurança na branch `rodada-02` (README com os cinco itens, `gerado/` e evidências da rodada 01) e propôs enviar a branch e abrir o PR antes do fim da rodada 02.
+- **[P]** Decidiu esperar a rodada 02 terminar antes de enviar a branch e abrir o PR.
+
+## D-17 · Estrutura do repositório
+
+- **[P]** Perguntou se o diário pode ficar em `evidencias/` e se pastas fora do esqueleto do kit são aceitas, pedindo confirmação sem edição.
+- **[IA]** Conferiu o slide 12 e o README do kit: os obrigatórios são `skills/`, `gerado/`, `evidencias/` e `README.md`, sem proibição de pastas extras. O diário é evidência de uso de IA e cabe em `evidencias/`. Apontou o risco de a banca não abrir `testes-pacote/`, que estava fora do esqueleto, e sugeriu movê-la para dentro de `evidencias/`.
+- **[D]** `testes-pacote/` movida para `evidencias/testes-pacote/`, com links do README e do diário ajustados. *(Decidido por: participante)*
 
 ---
 

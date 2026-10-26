@@ -75,7 +75,10 @@ A tela fica em `http://localhost:8000/` e a documentação da API em `http://loc
 | Critérios de aceite verificados via HTTP | [`evidencias/criterios-aceite.md`](evidencias/criterios-aceite.md) |
 | Revisão de qualidade e de segurança | [`evidencias/revisao.md`](evidencias/revisao.md), [`evidencias/seguranca.md`](evidencias/seguranca.md) |
 | Diário de decisões participante × IA | [`evidencias/diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
-| Teste de generalização em 6 pedidos | [`testes-pacote/`](testes-pacote/) |
+| Teste de generalização em 6 pedidos (pedidos, rodadas, relatos dos agentes) | [`evidencias/testes-pacote/`](evidencias/testes-pacote/) |
+| Calibração isolada da etapa de concepção | [`evidencias/calibracao/`](evidencias/calibracao/) |
+
+Tudo o que não é o pacote (`skills/`) nem o sistema gerado (`gerado/`) fica em `evidencias/`.
 
 Agente e modelo: Claude Code com `claude-opus-5-5`, em subagentes com contexto limpo, num diretório só com as skills e o pedido, sem intervenção humana.
 
@@ -85,7 +88,7 @@ Além do pedido de treino, escrevi 5 pedidos do mesmo tamanho e tipo, cada um fo
 
 | Rodada | Skills | Gates | Testes | CAs via HTTP | Ajuste manual |
 |---|---|---|---|---|---|
-| [01](testes-pacote/rodadas/rodada-01/RESULTADOS.md) | v1 | 36/36 | 390/390 | 60/60 | nenhum |
+| [01](evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md) | v1 | 36/36 | 390/390 | 60/60 | nenhum |
 
 A rodada 01 passou em tudo. Mesmo assim, a matriz de recorrência dos relatos dos agentes mostrou 18 problemas nas skills, seis deles em todas as execuções. Eles viraram as melhorias M1 a M12 das skills v2.
 
