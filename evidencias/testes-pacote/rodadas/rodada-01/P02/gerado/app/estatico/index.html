@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reembolso de despesas</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 1100px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+    td.num, th.num { text-align: right; }
+    fieldset { margin-bottom: 16px; }
+    form label { display: inline-block; margin: 4px 12px 4px 0; }
+    .tabela { overflow-x: auto; }
+    button { margin: 2px; }
+  </style>
+</head>
+<body>
+  <h1>Reembolso de despesas</h1>
+  <p id="status">Carregando...</p>
+  <p id="mensagem" role="status"></p>
+
+  <fieldset>
+    <legend>Lançar despesa</legend>
+    <form id="form-despesa">
+      <label>Nome <input name="colaborador_nome" required maxlength="200"></label>
+      <label>E-mail <input name="colaborador_email" type="email" required maxlength="200"></label>
+      <label>Data <input name="data_despesa" type="date" required></label>
+      <label>Categoria
+        <select name="categoria" required>
+          <option value="TRANSPORTE">TRANSPORTE</option>
+          <option value="HOSPEDAGEM">HOSPEDAGEM</option>
+          <option value="ALIMENTACAO">ALIMENTACAO</option>
+          <option value="OUTROS">OUTROS</option>
+        </select>
+      </label>
+      <label>Valor (R$) <input name="valor" type="number" step="0.01" required></label>
+      <label>Descrição <input name="descricao" required maxlength="200"></label>
+      <label>Nº do comprovante <input name="numero_comprovante" required maxlength="200"></label>
+      <button type="submit">Lançar</button>
+    </form>
+  </fieldset>
+
+  <fieldset>
+    <legend>Despesas</legend>
+    <form id="form-filtro">
+      <label>E-mail do colaborador <input name="email" type="text" maxlength="200"></label>
+      <label>Situação
+        <select name="situacao">
+          <option value="">Todas</option>
+          <option value="PENDENTE">PENDENTE</option>
+          <option value="APROVADA">APROVADA</option>
+          <option value="RECUSADA">RECUSADA</option>
+          <option value="PAGA">PAGA</option>
+        </select>
+      </label>
+      <button type="submit">Filtrar</button>
+    </form>
+    <div class="tabela">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th><th>Colaborador</th><th>Categoria</th><th class="num">Valor</th>
+            <th>Descrição</th><th>Comprovante</th><th>Situação</th><th>Motivo da recusa</th><th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="lista-despesas"></tbody>
+      </table>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Resumo do mês (só APROVADA e PAGA)</legend>
+    <form id="form-resumo">
+      <label>Mês <input name="mes" type="month" required></label>
+      <button type="submit">Ver resumo</button>
+    </form>
+    <table>
+      <thead><tr><th>Categoria</th><th class="num">Total</th></tr></thead>
+      <tbody id="resumo"></tbody>
+    </table>
+  </fieldset>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+    function mostrar(texto, classe) {
+      const el = document.getElementById("mensagem");
+      el.textContent = texto;
+      el.className = classe;
+    }
+
+    function celula(linha, texto, classe) {
+      const td = document.createElement("td");
+      td.textContent = texto == null ? "" : String(texto);
+      if (classe) td.className = classe;
+      linha.appendChild(td);
+      return td;
+    }
+
+    function botao(rotulo, acao) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = rotulo;
+      b.addEventListener("click", acao);
+      return b;
+    }
+
+    async function executar(acao, sucesso) {
+      try {
+        await acao();
+        mostrar(sucesso, "ok");
+        await carregarDespesas();
+        await carregarResumo();
+      } catch (e) {
+        mostrar("Erro: " + e.message, "erro");
+      }
+    }
+
+    function acoesDa(d) {
+      const div = document.createElement("div");
+      if (d.situacao === "PENDENTE") {
+        div.appendChild(botao("Aprovar", () => executar(
+          () => api(`/api/despesas/${d.id}/aprovar`, { method: "POST" }), "Despesa aprovada.")));
+        const motivo = document.createElement("input");
+        motivo.placeholder = "Motivo da recusa";
+        motivo.maxLength = 500;
+        div.appendChild(motivo);
+        div.appendChild(botao("Recusar", () => executar(
+          () => api(`/api/despesas/${d.id}/recusar`, { method: "POST", body: JSON.stringify({ motivo: motivo.value }) }),
+          "Despesa recusada.")));
+        div.appendChild(botao("Excluir", () => executar(
+          () => api(`/api/despesas/${d.id}`, { method: "DELETE" }), "Despesa excluída.")));
+      } else if (d.situacao === "APROVADA") {
+        div.appendChild(botao("Pagar", () => executar(
+          () => api(`/api/despesas/${d.id}/pagar`, { method: "POST" }), "Despesa marcada como paga.")));
+      }
+      return div;
+    }
+
+    async function carregarDespesas() {
+      const filtro = new FormData(document.getElementById("form-filtro"));
+      const params = new URLSearchParams();
+      if (filtro.get("email")) params.set("email", filtro.get("email"));
+      if (filtro.get("situacao")) params.set("situacao", filtro.get("situacao"));
+      const despesas = await api("/api/despesas?" + params.toString());
+      const corpo = document.getElementById("lista-despesas");
+      corpo.replaceChildren();
+      for (const d of despesas) {
+        const tr = document.createElement("tr");
+        celula(tr, d.data_despesa);
+        celula(tr, `${d.colaborador_nome} <${d.colaborador_email}>`);
+        celula(tr, d.categoria);
+        celula(tr, moeda.format(d.valor), "num");
+        celula(tr, d.descricao);
+        celula(tr, d.numero_comprovante);
+        celula(tr, d.situacao);
+        celula(tr, d.motivo_recusa);
+        celula(tr, "").appendChild(acoesDa(d));
+        corpo.appendChild(tr);
+      }
+      if (despesas.length === 0) {
+        const tr = document.createElement("tr");
+        celula(tr, "Nenhuma despesa encontrada.").colSpan = 9;
+        corpo.appendChild(tr);
+      }
+    }
+
+    async function carregarResumo() {
+      const mes = document.querySelector("#form-resumo [name=mes]").value;
+      if (!mes) return;
+      const r = await api("/api/relatorios/mensal?mes=" + encodeURIComponent(mes));
+      const corpo = document.getElementById("resumo");
+      corpo.replaceChildren();
+      for (const [categoria, total] of Object.entries(r.totais_por_categoria)) {
+        const tr = document.createElement("tr");
+        celula(tr, categoria);
+        celula(tr, moeda.format(total), "num");
+        corpo.appendChild(tr);
+      }
+      const tr = document.createElement("tr");
+      celula(tr, "Total geral").style.fontWeight = "bold";
+      celula(tr, moeda.format(r.total_geral), "num").style.fontWeight = "bold";
+      corpo.appendChild(tr);
+    }
+
+    document.getElementById("form-despesa").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const form = ev.target;
+      const dados = Object.fromEntries(new FormData(form));
+      executar(async () => {
+        await api("/api/despesas", { method: "POST", body: JSON.stringify(dados) });
+        form.reset();
+      }, "Despesa lançada como PENDENTE.");
+    });
+
+    document.getElementById("form-filtro").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      carregarDespesas().catch((e) => mostrar("Erro: " + e.message, "erro"));
+    });
+
+    document.getElementById("form-resumo").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      carregarResumo().catch((e) => mostrar("Erro: " + e.message, "erro"));
+    });
+
+    // Mês atual como padrão do resumo.
+    const hoje = new Date();
+    document.querySelector("#form-resumo [name=mes]").value =
+      `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+
+    api("/api/saude")
+      .then(() => { document.getElementById("status").textContent = "API disponível."; })
+      .then(carregarDespesas)
+      .then(carregarResumo)
+      .catch((e) => { document.getElementById("status").textContent = "Erro: " + e.message; });
+  </script>
+</body>
+</html>

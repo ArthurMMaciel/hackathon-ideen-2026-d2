@@ -14,11 +14,14 @@ Você vai levar um pedido em linguagem natural até um sistema funcionando, perc
 3. **Tudo que é gerado fica em `gerado/`.** Evidências ficam em `evidencias/`. Não altere `skills/` nem o arquivo do pedido.
 4. **Leia as referências antes da etapa 1:** [referencias/regras-transversais.md](referencias/regras-transversais.md) e [referencias/stack-padrao.md](referencias/stack-padrao.md). Elas valem para todas as etapas.
 5. **Só dados fictícios.** Nenhum segredo, senha ou token real em código, configuração ou log.
+6. **Não escreva nada fora da pasta de trabalho** (a que contém o pedido). Arquivos temporários e sondas vão em `gerado/.tmp/`, que já está no `.gitignore`. Use caminhos relativos a essa pasta.
+7. **Horários do log vêm do relógio, nunca de estimativa.** No início e no fim de cada etapa rode `python -c "from datetime import datetime; print(datetime.now().strftime('%H:%M'))"` e copie a saída.
 
 ## Etapa 0 · Preparação
 
+0. **Construção ou evolução?** Se `gerado/docs/PRD.md` já existe e o pedido é alterar, adicionar ou corrigir algo no sistema existente, não siga esta skill: use a skill `evolucao` (`../evolucao/SKILL.md`), que aplica a mudança sem refazer o sistema.
 1. Localize o pedido, nesta ordem: o arquivo citado no prompt; `PEDIDO.md` na raiz; o único `PEDIDO*.md` na raiz; o texto do próprio prompt. Registre qual foi usado.
-2. Confirme o ambiente com `python --version` (exige 3.11 ou superior). Se faltar, registre no log e pare com a mensagem de erro. Essa é a única parada permitida.
+2. Confirme o ambiente com `python --version` ou, se não existir, `python3 --version` (exige 3.11 ou superior). Use o comando que funcionou em todo o resto da execução. Se faltar, registre no log e pare com a mensagem de erro. Essa é a única parada permitida.
 3. Crie `gerado/` e `evidencias/` se não existirem.
 4. Inicie `evidencias/log-execucao.md` com o modelo de [referencias/modelo-log.md](referencias/modelo-log.md). Preencha agente, modelo, prompt de entrada (literal) e pedido usado.
 

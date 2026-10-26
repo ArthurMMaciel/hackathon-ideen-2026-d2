@@ -1,0 +1,13 @@
+INFO:     Started server process [8212]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:52406 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52410 - "GET /api/saude HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52411 - "GET /api/saude HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52412 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52413 - "GET /api/chamados/fila HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58263 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58263 - "GET /api/saude HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58263 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55851 - "GET /api/chamados/fila HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55851 - "GET /api/chamados HTTP/1.1" 200 OK

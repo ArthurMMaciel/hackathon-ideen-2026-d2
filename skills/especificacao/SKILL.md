@@ -25,7 +25,7 @@ Leia antes: `../fabrica/referencias/regras-transversais.md`, `../fabrica/referen
    - erros: status, código `ERRO` em maiúsculas e a regra (`RN-xx`) que o dispara.
 
    Todo `RF` que fala de operação precisa de pelo menos um endpoint. Ações que mudam estado sem criar recurso usam `POST /api/<recursos>/{id}/<acao>` (ex.: `/cancelar`).
-4. **Formatos.** Datas e horas em ISO 8601 com offset. Horário sem fuso é recusado com `422`. Valores calculados com unidade e arredondamento definidos pela `PR` correspondente.
+4. **Formatos e tipos.** Para cada campo de entrada, indique o tipo de `app/tipos.py` (`Id`, `DataHora`, `Data`, `Texto`, `TextoLongo`, `Email`, `Centavos`) ou o tipo Pydantic com limites. Datas e horas em ISO 8601 com offset; datas de calendário em `AAAA-MM-DD` (seção "Datas sem horário" das regras transversais). Valores calculados com unidade e arredondamento definidos pela `PR` correspondente. Para cada erro, o status segue o teste 409 ou 422 das regras transversais.
 5. **Regras de negócio no código.** Para cada `RN-xx`: a função de `app/dominio/` que a implementa e o código de erro que ela levanta. As funções de domínio recebem `agora` como parâmetro quando a regra depende do tempo.
 6. **Tela.** O que a tela mostra, quais ações oferece e quais endpoints chama. Uma página só. Mensagens de erro da API aparecem para o usuário.
 7. **Plano de testes.** Uma tabela com uma linha por teste:

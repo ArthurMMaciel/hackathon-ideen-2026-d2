@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Empréstimo de equipamentos</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 14px; }
+    section { margin-bottom: 24px; overflow-x: auto; }
+    #mensagem { min-height: 1.2em; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Empréstimo de equipamentos</h1>
+  <p id="status">Carregando...</p>
+  <p id="mensagem" role="status"></p>
+
+  <section>
+    <h2>Emprestar</h2>
+    <form id="form-emprestar">
+      <label>Tipo
+        <select id="filtro-tipo">
+          <option value="">Todos</option>
+          <option value="NOTEBOOK">Notebook</option>
+          <option value="PROJETOR">Projetor</option>
+          <option value="HEADSET">Headset</option>
+        </select>
+      </label>
+      <label>Equipamento disponível
+        <select id="equipamento" required></select>
+      </label>
+      <label>Nome
+        <input id="nome" required maxlength="200">
+      </label>
+      <label>E-mail
+        <input id="email" type="email" required maxlength="200">
+      </label>
+      <label>Devolução prevista
+        <input id="data-prevista" type="date" required>
+      </label>
+      <button type="submit">Emprestar</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Empréstimos em aberto</h2>
+    <table>
+      <thead><tr><th>Patrimônio</th><th>Tipo</th><th>Pessoa</th><th>E-mail</th><th>Retirada</th><th>Prevista</th><th>Com defeito?</th><th></th></tr></thead>
+      <tbody id="lista-abertos"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Atrasados</h2>
+    <table>
+      <thead><tr><th>Patrimônio</th><th>Tipo</th><th>Pessoa</th><th>E-mail</th><th>Prevista</th><th>Dias de atraso</th></tr></thead>
+      <tbody id="lista-atrasados"></tbody>
+    </table>
+  </section>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    function avisar(texto, erro) {
+      const el = document.getElementById("mensagem");
+      el.textContent = texto;
+      el.className = erro ? "erro" : "ok";
+    }
+
+    function celula(linha, texto) {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      linha.appendChild(td);
+      return td;
+    }
+
+    async function carregarDisponiveis() {
+      const tipo = document.getElementById("filtro-tipo").value;
+      const params = new URLSearchParams({ situacao: "DISPONIVEL" });
+      if (tipo) params.set("tipo", tipo);
+      const lista = await api("/api/equipamentos?" + params.toString());
+      const select = document.getElementById("equipamento");
+      select.replaceChildren();
+      for (const e of lista) {
+        const opcao = document.createElement("option");
+        opcao.value = String(e.id);
+        opcao.textContent = e.patrimonio + " - " + e.tipo + " - " + e.descricao;
+        select.appendChild(opcao);
+      }
+      if (lista.length === 0) {
+        const opcao = document.createElement("option");
+        opcao.value = "";
+        opcao.textContent = "Nenhum equipamento disponível";
+        select.appendChild(opcao);
+      }
+    }
+
+    async function carregarAbertos() {
+      const lista = await api("/api/emprestimos?status=ABERTO");
+      const corpo = document.getElementById("lista-abertos");
+      corpo.replaceChildren();
+      for (const e of lista) {
+        const linha = document.createElement("tr");
+        celula(linha, e.patrimonio);
+        celula(linha, e.tipo);
+        celula(linha, e.nome);
+        celula(linha, e.email);
+        celula(linha, e.data_retirada);
+        celula(linha, e.data_prevista);
+        const defeito = document.createElement("input");
+        defeito.type = "checkbox";
+        celula(linha, "").appendChild(defeito);
+        const botao = document.createElement("button");
+        botao.textContent = "Devolver";
+        botao.addEventListener("click", () => devolver(e.id, defeito.checked));
+        celula(linha, "").appendChild(botao);
+        corpo.appendChild(linha);
+      }
+    }
+
+    async function carregarAtrasados() {
+      const lista = await api("/api/emprestimos/atrasados");
+      const corpo = document.getElementById("lista-atrasados");
+      corpo.replaceChildren();
+      for (const e of lista) {
+        const linha = document.createElement("tr");
+        celula(linha, e.patrimonio);
+        celula(linha, e.tipo);
+        celula(linha, e.nome);
+        celula(linha, e.email);
+        celula(linha, e.data_prevista);
+        celula(linha, String(e.dias_atraso));
+        corpo.appendChild(linha);
+      }
+    }
+
+    async function recarregar() {
+      await Promise.all([carregarDisponiveis(), carregarAbertos(), carregarAtrasados()]);
+    }
+
+    async function devolver(id, defeito) {
+      try {
+        const e = await api("/api/emprestimos/" + id + "/devolver", { method: "POST", body: JSON.stringify({ defeito }) });
+        avisar("Devolução registrada. " + e.patrimonio + " agora está " + e.situacao_equipamento + ".", false);
+      } catch (erro) {
+        avisar("Erro: " + erro.message, true);
+      }
+      await recarregar().catch((erro) => avisar("Erro: " + erro.message, true));
+    }
+
+    document.getElementById("filtro-tipo").addEventListener("change", () => {
+      carregarDisponiveis().catch((erro) => avisar("Erro: " + erro.message, true));
+    });
+
+    document.getElementById("form-emprestar").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const corpo = {
+        equipamento_id: Number(document.getElementById("equipamento").value),
+        nome: document.getElementById("nome").value,
+        email: document.getElementById("email").value,
+        data_prevista: document.getElementById("data-prevista").value,
+      };
+      try {
+        const e = await api("/api/emprestimos", { method: "POST", body: JSON.stringify(corpo) });
+        avisar("Empréstimo registrado: " + e.patrimonio + " com " + e.nome + " até " + e.data_prevista + ".", false);
+      } catch (erro) {
+        avisar("Erro: " + erro.message, true);
+      }
+      await recarregar().catch((erro) => avisar("Erro: " + erro.message, true));
+    });
+
+    api("/api/saude")
+      .then(() => { document.getElementById("status").textContent = "API disponível."; return recarregar(); })
+      .catch((e) => { document.getElementById("status").textContent = "Erro: " + e.message; });
+  </script>
+</body>
+</html>

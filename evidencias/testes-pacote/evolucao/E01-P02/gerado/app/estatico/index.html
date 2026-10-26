@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reembolso de despesas</title>
+  <style>
+    :root {
+      --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1f2933; --suave: #616e7c; --borda: #d9dee4;
+      --primaria: #2459c7; --primaria-escura: #1b4497; --ok: #1d7a46; --ok-fundo: #e6f4ec;
+      --erro: #b42318; --erro-fundo: #fdecea; --raio: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background: var(--cartao); border-bottom: 1px solid var(--borda); padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 1080px; font-size: 20px; }
+    main { margin: 0 auto; max-width: 1080px; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; }
+    form, .filtros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+    input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); width: 100%; }
+    button { font: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--primaria); color: #fff; cursor: pointer; }
+    button:hover { background: var(--primaria-escura); }
+    button.secundario { background: #e4e8ee; color: var(--texto); }
+    .tabela { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 480px; }
+    th, td { border-bottom: 1px solid var(--borda); padding: 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--suave); font-weight: 600; }
+    .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4e8ee; font-size: 12px; font-weight: 600; }
+    .mensagem { padding: 10px 12px; border-radius: 8px; }
+    .mensagem.ok { background: var(--ok-fundo); color: var(--ok); }
+    .mensagem.erro { background: var(--erro-fundo); color: var(--erro); }
+    .vazio { color: var(--suave); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><h1>Reembolso de despesas</h1></header>
+  <main>
+    <div id="mensagem" class="mensagem" hidden></div>
+    <section>
+      <h2>Lançar despesa</h2>
+      <form id="form-despesa">
+        <label>Nome do colaborador <input name="colaborador_nome" required maxlength="200"></label>
+        <label>E-mail do colaborador <input name="colaborador_email" type="email" required maxlength="254"></label>
+        <label>Data da despesa <input name="data" type="date" required></label>
+        <label>Categoria
+          <select name="categoria" required>
+            <option value="TRANSPORTE">TRANSPORTE</option>
+            <option value="HOSPEDAGEM">HOSPEDAGEM</option>
+            <option value="ALIMENTACAO">ALIMENTACAO</option>
+            <option value="OUTROS">OUTROS</option>
+          </select>
+        </label>
+        <label>Valor (R$) <input name="valor" type="number" step="0.01" min="0.01" required></label>
+        <label>Descrição <input name="descricao" required maxlength="200"></label>
+        <label>Número do comprovante <input name="comprovante" required maxlength="200"></label>
+        <button type="submit">Lançar</button>
+      </form>
+    </section>
+    <section>
+      <h2>Despesas</h2>
+      <form id="form-filtro" class="filtros">
+        <label>E-mail do colaborador <input name="email" type="email"></label>
+        <label>Situação
+          <select name="situacao">
+            <option value="">Todas</option>
+            <option value="PENDENTE">PENDENTE</option>
+            <option value="APROVADA">APROVADA</option>
+            <option value="RECUSADA">RECUSADA</option>
+            <option value="PAGA">PAGA</option>
+          </select>
+        </label>
+        <button type="submit">Filtrar</button>
+      </form>
+      <div id="lista-despesas"></div>
+    </section>
+    <section>
+      <h2>Resumo do mês</h2>
+      <form id="form-resumo" class="filtros">
+        <label>Mês <input name="mes" type="month" required></label>
+        <button type="submit">Ver resumo</button>
+      </form>
+      <div id="resumo"></div>
+    </section>
+  </main>
+  <script>
+    // Dados da API entram sempre por textContent; nunca por innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        const detalhe = corpo && Array.isArray(corpo.detail) ? corpo.detail.map((d) => d.msg).join("; ") : null;
+        throw new Error((corpo && corpo.mensagem) || detalhe || resposta.statusText);
+      }
+      return corpo;
+    }
+
+    function mostrarMensagem(texto, tipo = "ok") {
+      const caixa = document.getElementById("mensagem");
+      caixa.textContent = texto;
+      caixa.className = "mensagem " + tipo;
+      caixa.hidden = false;
+    }
+
+    // Lê os campos de um <form> num objeto; campos type=number viram número, vazios ficam de fora.
+    function lerFormulario(form) {
+      const dados = {};
+      for (const campo of form.elements) {
+        if (!campo.name || campo.value === "") continue;
+        dados[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value;
+      }
+      return dados;
+    }
+
+    // Monta uma tabela dentro de `destino`. colunas: [{titulo, valor: (linha) => texto}].
+    function desenharTabela(destino, colunas, linhas, textoVazio = "Nada para mostrar.") {
+      destino.replaceChildren();
+      if (!linhas.length) {
+        const p = document.createElement("p");
+        p.className = "vazio";
+        p.textContent = textoVazio;
+        destino.append(p);
+        return;
+      }
+      const envoltorio = document.createElement("div");
+      envoltorio.className = "tabela";
+      const tabela = document.createElement("table");
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const coluna of colunas) {
+        const th = document.createElement("th");
+        th.textContent = coluna.titulo;
+        cabecalho.append(th);
+      }
+      const corpo = tabela.createTBody();
+      for (const linha of linhas) {
+        const tr = corpo.insertRow();
+        for (const coluna of colunas) {
+          const valor = coluna.valor(linha);
+          const td = tr.insertCell();
+          if (valor instanceof Node) td.append(valor);
+          else td.textContent = valor ?? "";
+        }
+      }
+      envoltorio.append(tabela);
+      destino.append(envoltorio);
+    }
+
+    function reais(centavos) {
+      return (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    function botao(texto, aoClicar, classe = "") {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = texto;
+      if (classe) b.className = classe;
+      b.addEventListener("click", aoClicar);
+      return b;
+    }
+
+    async function executar(acao, sucesso) {
+      try {
+        await acao();
+        mostrarMensagem(sucesso, "ok");
+        await carregarDespesas();
+        await carregarResumo();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    function acoes(d) {
+      const caixa = document.createElement("div");
+      caixa.style.display = "grid";
+      caixa.style.gap = "6px";
+      if (d.situacao === "PENDENTE") {
+        caixa.append(botao("Aprovar", () => executar(
+          () => api(`/api/despesas/${d.id}/aprovar`, { method: "POST" }), "Despesa aprovada.")));
+        const motivo = document.createElement("input");
+        motivo.placeholder = "Motivo da recusa";
+        motivo.maxLength = 200;
+        caixa.append(motivo);
+        caixa.append(botao("Recusar", () => executar(
+          () => api(`/api/despesas/${d.id}/recusar`, { method: "POST", body: JSON.stringify({ motivo: motivo.value }) }),
+          "Despesa recusada."), "secundario"));
+        caixa.append(botao("Excluir", () => executar(
+          () => api(`/api/despesas/${d.id}`, { method: "DELETE" }), "Despesa excluída."), "secundario"));
+        caixa.append(edicao(d));
+      }
+      if (d.situacao === "APROVADA") {
+        caixa.append(botao("Marcar como paga", () => executar(
+          () => api(`/api/despesas/${d.id}/pagar`, { method: "POST" }), "Despesa paga.")));
+      }
+      return caixa;
+    }
+
+    // RF-12 (evolução 1): edição de categoria, valor e descrição só em PENDENTE.
+    function edicao(d) {
+      const bloco = document.createElement("div");
+      bloco.style.display = "grid";
+      bloco.style.gap = "6px";
+      const campos = document.createElement("div");
+      campos.style.display = "none";
+      campos.style.gap = "6px";
+      const categoria = document.createElement("select");
+      for (const c of ["TRANSPORTE", "HOSPEDAGEM", "ALIMENTACAO", "OUTROS"]) {
+        const op = document.createElement("option");
+        op.value = c;
+        op.textContent = c;
+        categoria.append(op);
+      }
+      categoria.value = d.categoria;
+      const valor = document.createElement("input");
+      valor.type = "number";
+      valor.step = "0.01";
+      valor.min = "0";
+      valor.value = (d.valor_centavos / 100).toFixed(2);
+      const descricao = document.createElement("input");
+      descricao.maxLength = 200;
+      descricao.value = d.descricao;
+      const abrir = botao("Editar", () => {
+        campos.style.display = "grid";
+        abrir.style.display = "none";
+      }, "secundario");
+      campos.append(categoria, valor, descricao,
+        botao("Salvar", () => executar(
+          () => api(`/api/despesas/${d.id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              categoria: categoria.value,
+              valor_centavos: Math.round(Number(valor.value) * 100),
+              descricao: descricao.value,
+            }),
+          }), "Despesa editada.")),
+        botao("Cancelar", () => {
+          campos.style.display = "none";
+          abrir.style.display = "";
+        }, "secundario"));
+      bloco.append(abrir, campos);
+      return bloco;
+    }
+
+    function etiqueta(texto) {
+      const s = document.createElement("span");
+      s.className = "etiqueta";
+      s.textContent = texto;
+      return s;
+    }
+
+    async function carregarDespesas() {
+      const filtro = lerFormulario(document.getElementById("form-filtro"));
+      const params = new URLSearchParams(filtro);
+      try {
+        const lista = await api("/api/despesas" + (params.toString() ? "?" + params : ""));
+        desenharTabela(document.getElementById("lista-despesas"), [
+          { titulo: "Colaborador", valor: (d) => d.colaborador_nome },
+          { titulo: "E-mail", valor: (d) => d.colaborador_email },
+          { titulo: "Data", valor: (d) => d.data },
+          { titulo: "Categoria", valor: (d) => d.categoria },
+          { titulo: "Valor", valor: (d) => reais(d.valor_centavos) },
+          { titulo: "Descrição", valor: (d) => d.descricao },
+          { titulo: "Comprovante", valor: (d) => d.comprovante },
+          { titulo: "Situação", valor: (d) => etiqueta(d.situacao) },
+          { titulo: "Motivo", valor: (d) => d.motivo_recusa || "" },
+          { titulo: "Ações", valor: (d) => acoes(d) },
+        ], lista, "Nenhuma despesa encontrada.");
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    async function carregarResumo() {
+      const mes = document.getElementById("form-resumo").elements.mes.value;
+      if (!mes) return;
+      try {
+        const r = await api("/api/relatorios/mensal?mes=" + encodeURIComponent(mes));
+        const linhas = Object.entries(r.totais_centavos).map(([categoria, total]) => (
+          { categoria, total, quantidade: r.quantidades[categoria] }));
+        linhas.push({ categoria: "TOTAL GERAL", total: r.total_geral_centavos, quantidade: r.quantidade_total });
+        desenharTabela(document.getElementById("resumo"), [
+          { titulo: "Categoria (só APROVADA e PAGA)", valor: (l) => l.categoria },
+          { titulo: "Quantidade", valor: (l) => String(l.quantidade) },
+          { titulo: "Total", valor: (l) => reais(l.total) },
+        ], linhas);
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    document.getElementById("form-despesa").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const form = ev.target;
+      const dados = lerFormulario(form);
+      dados.valor_centavos = Math.round(Number(dados.valor) * 100);
+      delete dados.valor;
+      executar(async () => {
+        await api("/api/despesas", { method: "POST", body: JSON.stringify(dados) });
+        form.reset();
+      }, "Despesa lançada como PENDENTE.");
+    });
+
+    document.getElementById("form-filtro").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      carregarDespesas();
+    });
+
+    document.getElementById("form-resumo").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      carregarResumo();
+    });
+
+    const agora = new Date();
+    document.getElementById("form-resumo").elements.mes.value =
+      `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+    carregarDespesas();
+    carregarResumo();
+  </script>
+</body>
+</html>

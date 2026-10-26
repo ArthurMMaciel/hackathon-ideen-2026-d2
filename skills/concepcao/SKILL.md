@@ -35,6 +35,9 @@ Leia antes, se ainda não leu: `../fabrica/referencias/regras-transversais.md`.
    - definição de período em consultas e relatórios ("dia", "mês", horário de funcionamento)
    - arredondamento e unidade de resultados calculados
    - ordenação de listagens
+   - trechos do pedido que se contradizem entre si (escolha a leitura que satisfaz os critérios de aceite)
+   - interação entre duas regras que valem no mesmo momento (ex.: janela de inscrição fechada e promoção da fila de espera)
+   - datas de calendário sem horário (o que é "hoje", se o período conta o primeiro e o último dia)
 6. **Escreva o fora de escopo.** Inclua o que o pedido exclui ("não precisa de login") e o que o próprio desafio exclui: deploy, integração com sistema real e dados reais.
 7. **Mapeie os critérios de aceite.** Copie cada `CA-xx` do pedido, com o mesmo código, o cenário e o resultado esperado em colunas separadas, e indique os `RF`/`RN` que ele verifica. Se o pedido não trouxer critérios, crie `CA-01` em diante: um caminho feliz por `RF` e uma recusa por `RN`.
 8. **Monte a tabela de cobertura do pedido** no log de execução: cada trecho do pedido e os códigos que o cobrem. Trecho sem código é lacuna. Volte ao passo 3 ou 5.
@@ -43,13 +46,14 @@ Leia antes, se ainda não leu: `../fabrica/referencias/regras-transversais.md`.
 ## O que não fazer
 
 - Não invente funcionalidade que o pedido não citou (notificação, login, exportação, perfis de acesso). Se parecer útil, ela vai para o fora de escopo.
-- Não escolha tecnologia no PRD (linguagem, framework, produto de banco, formato de dado). Stack, formatos e endpoints são da especificação. Termos que o próprio pedido usa podem aparecer.
+- Não escolha tecnologia no PRD (linguagem, framework, produto de banco, formato de dado). Stack, formatos e endpoints são da especificação. Termos e formatos que o próprio pedido usa (ex.: "API REST", código `EQ-0000`) podem aparecer.
+- Uma consulta ou listagem que a tela pedida precisa para funcionar (ex.: listar o que está em aberto para poder devolver) não é funcionalidade inventada: registre como `RF` e cite o trecho do pedido que a exige.
 - Não pergunte ao usuário. Lacuna vira premissa.
 - Não reescreva nem renumere os critérios de aceite do pedido.
 
 ## Gate da concepção
 
-- [ ] `gerado/docs/PRD.md` existe com até 60 linhas de itens (linhas de tabela e de lista; títulos, cabeçalhos e separadores de tabela não contam).
+- [ ] `gerado/docs/PRD.md` existe com até 70 linhas de itens (linhas de tabela e de lista; títulos, cabeçalhos e separadores de tabela não contam).
 - [ ] Todo trecho do pedido aparece na tabela de cobertura do log com pelo menos um código.
 - [ ] Cada item da lista de lacunas comuns tem uma linha no log, com código ou "não se aplica" e motivo.
 - [ ] Toda `RN` tem número e borda explícitos quando envolve limite.

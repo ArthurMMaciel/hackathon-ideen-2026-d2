@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Férias da equipe</title>
+  <style>
+    :root {
+      --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1f2933; --suave: #616e7c; --borda: #d9dee4;
+      --primaria: #2459c7; --primaria-escura: #1b4497; --ok: #1d7a46; --ok-fundo: #e6f4ec;
+      --erro: #b42318; --erro-fundo: #fdecea; --raio: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background: var(--cartao); border-bottom: 1px solid var(--borda); padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 1080px; font-size: 20px; }
+    main { margin: 0 auto; max-width: 1080px; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; }
+    form, .filtros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+    input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); width: 100%; }
+    button { font: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--primaria); color: #fff; cursor: pointer; }
+    button:hover { background: var(--primaria-escura); }
+    button.secundario { background: #e4e8ee; color: var(--texto); }
+    .tabela { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 480px; }
+    th, td { border-bottom: 1px solid var(--borda); padding: 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--suave); font-weight: 600; }
+    .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4e8ee; font-size: 12px; font-weight: 600; }
+    .mensagem { padding: 10px 12px; border-radius: 8px; }
+    .mensagem.ok { background: var(--ok-fundo); color: var(--ok); }
+    .mensagem.erro { background: var(--erro-fundo); color: var(--erro); }
+    .vazio { color: var(--suave); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><h1>Férias da equipe</h1></header>
+  <main>
+    <div id="mensagem" class="mensagem" hidden></div>
+    <section>
+      <h2>Solicitar férias</h2>
+      <form id="form-solicitar">
+        <label>Colaborador <select name="colaborador_id" id="select-colaborador" required></select></label>
+        <label>Início <input type="date" name="inicio" required></label>
+        <label>Fim <input type="date" name="fim" required></label>
+        <button type="submit">Solicitar</button>
+      </form>
+    </section>
+    <section>
+      <h2>Solicitações</h2>
+      <div id="lista-solicitacoes"><p class="vazio">Carregando...</p></div>
+    </section>
+    <section>
+      <h2>Calendário do mês</h2>
+      <form id="form-calendario">
+        <label>Mês <input type="month" name="mes" id="campo-mes" required></label>
+        <button type="submit">Ver</button>
+      </form>
+      <div id="calendario"></div>
+    </section>
+    <section>
+      <h2>Colaboradores e saldo</h2>
+      <div id="lista-colaboradores"><p class="vazio">Carregando...</p></div>
+    </section>
+  </main>
+  <script>
+    // Dados da API entram sempre por textContent; nunca por innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        const detalhe = corpo && Array.isArray(corpo.detail) ? corpo.detail.map((d) => d.msg).join("; ") : null;
+        throw new Error((corpo && corpo.mensagem) || detalhe || resposta.statusText);
+      }
+      return corpo;
+    }
+
+    function mostrarMensagem(texto, tipo = "ok") {
+      const caixa = document.getElementById("mensagem");
+      caixa.textContent = texto;
+      caixa.className = "mensagem " + tipo;
+      caixa.hidden = false;
+    }
+
+    // Lê os campos de um <form> num objeto; campos type=number viram número, vazios ficam de fora.
+    function lerFormulario(form) {
+      const dados = {};
+      for (const campo of form.elements) {
+        if (!campo.name || campo.value === "") continue;
+        dados[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value;
+      }
+      return dados;
+    }
+
+    // Monta uma tabela dentro de `destino`. colunas: [{titulo, valor: (linha) => texto}].
+    function desenharTabela(destino, colunas, linhas, textoVazio = "Nada para mostrar.") {
+      destino.replaceChildren();
+      if (!linhas.length) {
+        const p = document.createElement("p");
+        p.className = "vazio";
+        p.textContent = textoVazio;
+        destino.append(p);
+        return;
+      }
+      const envoltorio = document.createElement("div");
+      envoltorio.className = "tabela";
+      const tabela = document.createElement("table");
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const coluna of colunas) {
+        const th = document.createElement("th");
+        th.textContent = coluna.titulo;
+        cabecalho.append(th);
+      }
+      const corpo = tabela.createTBody();
+      for (const linha of linhas) {
+        const tr = corpo.insertRow();
+        for (const coluna of colunas) {
+          const valor = coluna.valor(linha);
+          const td = tr.insertCell();
+          if (valor instanceof Node) td.append(valor);
+          else td.textContent = valor ?? "";
+        }
+      }
+      envoltorio.append(tabela);
+      destino.append(envoltorio);
+    }
+
+    const EQUIPES = ["DADOS", "PRODUTO", "SUPORTE"];
+
+    function botao(texto, aoClicar, classe = "") {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = texto;
+      if (classe) b.className = classe;
+      b.addEventListener("click", aoClicar);
+      return b;
+    }
+
+    function etiqueta(texto) {
+      const span = document.createElement("span");
+      span.className = "etiqueta";
+      span.textContent = texto;
+      return span;
+    }
+
+    async function carregarColaboradores() {
+      const lista = await api("/api/colaboradores");
+      const select = document.getElementById("select-colaborador");
+      const atual = select.value;
+      select.replaceChildren();
+      for (const c of lista) {
+        const opcao = document.createElement("option");
+        opcao.value = c.id;
+        opcao.textContent = `${c.nome} (${c.equipe})`;
+        select.append(opcao);
+      }
+      if (atual) select.value = atual;
+      desenharTabela(document.getElementById("lista-colaboradores"), [
+        { titulo: "Nome", valor: (c) => c.nome },
+        { titulo: "Equipe", valor: (c) => c.equipe },
+        { titulo: "E-mail", valor: (c) => c.email },
+        { titulo: "Saldo", valor: (c) => String(c.saldo) },
+        { titulo: "Saldo disponível", valor: (c) => String(c.saldo_disponivel) },
+      ], lista, "Nenhum colaborador cadastrado.");
+    }
+
+    async function acao(id, nome, rotulo) {
+      try {
+        await api(`/api/solicitacoes/${id}/${nome}`, { method: "POST" });
+        mostrarMensagem(`Solicitação ${id} ${rotulo}.`);
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+      await recarregar();
+    }
+
+    async function carregarSolicitacoes() {
+      const lista = await api("/api/solicitacoes");
+      desenharTabela(document.getElementById("lista-solicitacoes"), [
+        { titulo: "Código", valor: (s) => String(s.id) },
+        { titulo: "Colaborador", valor: (s) => s.colaborador_nome },
+        { titulo: "Equipe", valor: (s) => s.equipe },
+        { titulo: "Início", valor: (s) => s.inicio },
+        { titulo: "Fim", valor: (s) => s.fim },
+        { titulo: "Dias", valor: (s) => String(s.dias) },
+        { titulo: "Situação", valor: (s) => etiqueta(s.situacao) },
+        { titulo: "Ações", valor: (s) => {
+          const caixa = document.createElement("div");
+          if (s.situacao === "SOLICITADA") {
+            caixa.append(botao("Aprovar", () => acao(s.id, "aprovar", "aprovada")), " ");
+            caixa.append(botao("Reprovar", () => acao(s.id, "reprovar", "reprovada"), "secundario"), " ");
+          }
+          if (s.situacao === "SOLICITADA" || s.situacao === "APROVADA") {
+            caixa.append(botao("Cancelar", () => acao(s.id, "cancelar", "cancelada"), "secundario"));
+          }
+          return caixa;
+        } },
+      ], lista, "Nenhuma solicitação.");
+    }
+
+    async function carregarCalendario() {
+      const mes = document.getElementById("campo-mes").value;
+      if (!mes) return;
+      const dados = await api("/api/calendario?mes=" + encodeURIComponent(mes));
+      const nomes = (dia, equipe) => dia.equipes[equipe].map((p) => p.nome).join(", ") || "—";
+      desenharTabela(document.getElementById("calendario"), [
+        { titulo: "Dia", valor: (d) => d.data },
+        ...EQUIPES.map((eq) => ({ titulo: eq, valor: (d) => nomes(d, eq) })),
+      ], dados.dias, "Mês sem dias.");
+    }
+
+    async function recarregar() {
+      try {
+        await Promise.all([carregarColaboradores(), carregarSolicitacoes(), carregarCalendario()]);
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    document.getElementById("form-solicitar").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const dados = lerFormulario(evento.target);
+      dados.colaborador_id = Number(dados.colaborador_id);
+      try {
+        const s = await api("/api/solicitacoes", { method: "POST", body: JSON.stringify(dados) });
+        mostrarMensagem(`Solicitação ${s.id} registrada: ${s.dias} dias, situação ${s.situacao}.`);
+        evento.target.reset();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+      await recarregar();
+    });
+
+    document.getElementById("form-calendario").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      try {
+        await carregarCalendario();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    const hoje = new Date();
+    document.getElementById("campo-mes").value =
+      `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+    recarregar();
+  </script>
+</body>
+</html>

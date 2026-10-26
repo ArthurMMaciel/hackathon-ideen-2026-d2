@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chamados de suporte</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 1100px; padding: 16px; }
+    .erro { color: #b00020; }
+    .ok { color: #1b5e20; }
+    .atrasado { color: #fff; background: #b00020; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+    form.abrir { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+    form.abrir label { display: flex; flex-direction: column; font-size: 14px; }
+    section { margin-bottom: 24px; }
+    button { margin: 2px; }
+  </style>
+</head>
+<body>
+  <h1>Chamados de suporte</h1>
+  <p id="status">Carregando...</p>
+  <p id="mensagem" role="status"></p>
+
+  <section>
+    <h2>Abrir chamado</h2>
+    <form id="form-abrir" class="abrir">
+      <label>Título <input name="titulo" required maxlength="200"></label>
+      <label>Solicitante (nome) <input name="solicitante_nome" required maxlength="100"></label>
+      <label>Solicitante (e-mail) <input name="solicitante_email" type="email" required maxlength="200"></label>
+      <label>Categoria
+        <select name="categoria"><option>ACESSO</option><option>HARDWARE</option><option>SOFTWARE</option></select>
+      </label>
+      <label>Prioridade
+        <select name="prioridade"><option>BAIXA</option><option selected>MEDIA</option><option>ALTA</option><option>CRITICA</option></select>
+      </label>
+      <label>Descrição <textarea name="descricao" required maxlength="2000"></textarea></label>
+      <div><button type="submit">Abrir chamado</button></div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Fila (não resolvidos, por prazo)</h2>
+    <table>
+      <thead><tr><th>#</th><th>Título</th><th>Prioridade</th><th>Situação</th><th>Prazo</th><th>Responsável</th><th>Indicação</th><th>Ações</th></tr></thead>
+      <tbody id="fila"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Todos os chamados</h2>
+    <table>
+      <thead><tr><th>#</th><th>Título</th><th>Solicitante</th><th>Prioridade</th><th>Situação</th><th>Prazo</th><th>Resolvido em</th><th>No prazo?</th><th>Ações</th></tr></thead>
+      <tbody id="todos"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Relatório de prazo</h2>
+    <form id="form-relatorio">
+      <label>Data inicial <input type="date" name="data_inicial" required></label>
+      <label>Data final <input type="date" name="data_final" required></label>
+      <button type="submit">Gerar</button>
+    </form>
+    <table>
+      <thead><tr><th>Prioridade</th><th>Resolvidos</th><th>Dentro do prazo</th><th>% dentro do prazo</th></tr></thead>
+      <tbody id="relatorio"></tbody>
+    </table>
+  </section>
+
+  <script>
+    // Sempre textContent para dados vindos da API; nunca innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json();
+      if (!resposta.ok) {
+        const mensagem = corpo && (corpo.mensagem || JSON.stringify(corpo.detail)) || resposta.statusText;
+        throw new Error(mensagem);
+      }
+      return corpo;
+    }
+
+    function mensagem(texto, erro) {
+      const el = document.getElementById("mensagem");
+      el.textContent = texto;
+      el.className = erro ? "erro" : "ok";
+    }
+
+    function dataHora(iso) {
+      return iso ? new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "";
+    }
+
+    function celula(linha, texto) {
+      const td = document.createElement("td");
+      td.textContent = texto == null ? "" : String(texto);
+      linha.appendChild(td);
+      return td;
+    }
+
+    function botao(td, rotulo, acao) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = rotulo;
+      b.addEventListener("click", acao);
+      td.appendChild(b);
+    }
+
+    async function mudar(id, acao, corpo) {
+      try {
+        const opcoes = { method: "POST" };
+        if (corpo) opcoes.body = JSON.stringify(corpo);
+        const c = await api(`/api/chamados/${id}/${acao}`, opcoes);
+        mensagem(`Chamado ${c.id} agora está ${c.situacao}.`, false);
+        await carregar();
+      } catch (e) {
+        mensagem("Erro: " + e.message, true);
+      }
+    }
+
+    function acoes(td, c) {
+      if (c.situacao === "ABERTO") {
+        botao(td, "Assumir", () => {
+          const responsavel = prompt("Nome do responsável:");
+          if (responsavel !== null) mudar(c.id, "assumir", { responsavel });
+        });
+      }
+      if (c.situacao === "EM_ATENDIMENTO") {
+        botao(td, "Resolver", () => {
+          const solucao = prompt("Descrição da solução:");
+          if (solucao !== null) mudar(c.id, "resolver", { solucao });
+        });
+      }
+      if (c.situacao === "RESOLVIDO") {
+        botao(td, "Fechar", () => mudar(c.id, "fechar"));
+        botao(td, "Reabrir", () => mudar(c.id, "reabrir"));
+      }
+    }
+
+    async function carregar() {
+      const fila = await api("/api/chamados/fila");
+      const corpoFila = document.getElementById("fila");
+      corpoFila.replaceChildren();
+      for (const c of fila) {
+        const tr = document.createElement("tr");
+        celula(tr, c.id); celula(tr, c.titulo); celula(tr, c.prioridade); celula(tr, c.situacao);
+        celula(tr, dataHora(c.prazo)); celula(tr, c.responsavel);
+        const ind = celula(tr, "");
+        if (c.indicacao) {
+          const span = document.createElement("span");
+          span.className = "atrasado";
+          span.textContent = c.indicacao;
+          ind.appendChild(span);
+        }
+        acoes(celula(tr, ""), c);
+        corpoFila.appendChild(tr);
+      }
+
+      const todos = await api("/api/chamados");
+      const corpoTodos = document.getElementById("todos");
+      corpoTodos.replaceChildren();
+      for (const c of todos) {
+        const tr = document.createElement("tr");
+        celula(tr, c.id); celula(tr, c.titulo); celula(tr, `${c.solicitante_nome} <${c.solicitante_email}>`);
+        celula(tr, c.prioridade); celula(tr, c.situacao); celula(tr, dataHora(c.prazo));
+        celula(tr, dataHora(c.resolvido_em));
+        celula(tr, c.dentro_do_prazo === null ? "" : (c.dentro_do_prazo ? "Sim" : "Não"));
+        acoes(celula(tr, ""), c);
+        corpoTodos.appendChild(tr);
+      }
+    }
+
+    document.getElementById("form-abrir").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const dados = Object.fromEntries(new FormData(ev.target).entries());
+      try {
+        const c = await api("/api/chamados", { method: "POST", body: JSON.stringify(dados) });
+        mensagem(`Chamado ${c.id} aberto. Prazo: ${dataHora(c.prazo)}.`, false);
+        ev.target.reset();
+        await carregar();
+      } catch (e) {
+        mensagem("Erro: " + e.message, true);
+      }
+    });
+
+    document.getElementById("form-relatorio").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const params = new URLSearchParams(new FormData(ev.target));
+      try {
+        const r = await api("/api/relatorios/prazo?" + params.toString());
+        const corpo = document.getElementById("relatorio");
+        corpo.replaceChildren();
+        for (const p of r.prioridades) {
+          const tr = document.createElement("tr");
+          celula(tr, p.prioridade); celula(tr, p.resolvidos); celula(tr, p.dentro_do_prazo);
+          celula(tr, p.percentual_dentro_do_prazo === null ? "—" : p.percentual_dentro_do_prazo + "%");
+          corpo.appendChild(tr);
+        }
+        mensagem("Relatório gerado.", false);
+      } catch (e) {
+        mensagem("Erro: " + e.message, true);
+      }
+    });
+
+    api("/api/saude")
+      .then(() => { document.getElementById("status").textContent = "API disponível."; return carregar(); })
+      .catch((e) => { document.getElementById("status").textContent = "Erro: " + e.message; });
+  </script>
+</body>
+</html>

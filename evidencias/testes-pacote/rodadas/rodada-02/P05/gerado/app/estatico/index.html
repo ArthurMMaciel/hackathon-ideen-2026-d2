@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chamados de suporte</title>
+  <style>
+    :root {
+      --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1f2933; --suave: #616e7c; --borda: #d9dee4;
+      --primaria: #2459c7; --primaria-escura: #1b4497; --ok: #1d7a46; --ok-fundo: #e6f4ec;
+      --erro: #b42318; --erro-fundo: #fdecea; --raio: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background: var(--cartao); border-bottom: 1px solid var(--borda); padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 1080px; font-size: 20px; }
+    main { margin: 0 auto; max-width: 1080px; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; }
+    form, .filtros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+    input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); width: 100%; }
+    button { font: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--primaria); color: #fff; cursor: pointer; }
+    button:hover { background: var(--primaria-escura); }
+    button.secundario { background: #e4e8ee; color: var(--texto); }
+    .tabela { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 480px; }
+    th, td { border-bottom: 1px solid var(--borda); padding: 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--suave); font-weight: 600; }
+    .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4e8ee; font-size: 12px; font-weight: 600; }
+    .mensagem { padding: 10px 12px; border-radius: 8px; }
+    .mensagem.ok { background: var(--ok-fundo); color: var(--ok); }
+    .mensagem.erro { background: var(--erro-fundo); color: var(--erro); }
+    .vazio { color: var(--suave); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><h1>Chamados de suporte</h1></header>
+  <main>
+    <div id="mensagem" class="mensagem" hidden></div>
+    <section>
+      <h2>Abrir chamado</h2>
+      <form id="form-abrir">
+        <label>Título <input name="titulo" maxlength="200" required></label>
+        <label>Descrição <textarea name="descricao" maxlength="2000" rows="2" required></textarea></label>
+        <label>Nome do solicitante <input name="solicitante_nome" maxlength="200" required></label>
+        <label>E-mail do solicitante <input name="solicitante_email" type="email" maxlength="254" required></label>
+        <label>Categoria
+          <select name="categoria"><option>ACESSO</option><option>HARDWARE</option><option>SOFTWARE</option></select>
+        </label>
+        <label>Prioridade
+          <select name="prioridade"><option>BAIXA</option><option selected>MEDIA</option><option>ALTA</option><option>CRITICA</option></select>
+        </label>
+        <button type="submit">Abrir chamado</button>
+      </form>
+    </section>
+    <section>
+      <h2>Fila (não resolvidos, por prazo)</h2>
+      <div class="filtros"><button type="button" class="secundario" id="atualizar">Atualizar</button></div>
+      <div id="fila"></div>
+    </section>
+    <section>
+      <h2>Todos os chamados · mudar situação</h2>
+      <div id="chamados"></div>
+    </section>
+    <section>
+      <h2>Relatório de prazo</h2>
+      <form id="form-relatorio">
+        <label>Data inicial <input name="data_inicial" type="date" required></label>
+        <label>Data final <input name="data_final" type="date" required></label>
+        <button type="submit">Gerar relatório</button>
+      </form>
+      <div id="relatorio"></div>
+    </section>
+  </main>
+  <script>
+    // Dados da API entram sempre por textContent; nunca por innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        const detalhe = corpo && Array.isArray(corpo.detail) ? corpo.detail.map((d) => d.msg).join("; ") : null;
+        throw new Error((corpo && corpo.mensagem) || detalhe || resposta.statusText);
+      }
+      return corpo;
+    }
+
+    function mostrarMensagem(texto, tipo = "ok") {
+      const caixa = document.getElementById("mensagem");
+      caixa.textContent = texto;
+      caixa.className = "mensagem " + tipo;
+      caixa.hidden = false;
+    }
+
+    // Lê os campos de um <form> num objeto; campos type=number viram número, vazios ficam de fora.
+    function lerFormulario(form) {
+      const dados = {};
+      for (const campo of form.elements) {
+        if (!campo.name || campo.value === "") continue;
+        dados[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value;
+      }
+      return dados;
+    }
+
+    // Monta uma tabela dentro de `destino`. colunas: [{titulo, valor: (linha) => texto}].
+    function desenharTabela(destino, colunas, linhas, textoVazio = "Nada para mostrar.") {
+      destino.replaceChildren();
+      if (!linhas.length) {
+        const p = document.createElement("p");
+        p.className = "vazio";
+        p.textContent = textoVazio;
+        destino.append(p);
+        return;
+      }
+      const envoltorio = document.createElement("div");
+      envoltorio.className = "tabela";
+      const tabela = document.createElement("table");
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const coluna of colunas) {
+        const th = document.createElement("th");
+        th.textContent = coluna.titulo;
+        cabecalho.append(th);
+      }
+      const corpo = tabela.createTBody();
+      for (const linha of linhas) {
+        const tr = corpo.insertRow();
+        for (const coluna of colunas) {
+          const valor = coluna.valor(linha);
+          const td = tr.insertCell();
+          if (valor instanceof Node) td.append(valor);
+          else td.textContent = valor ?? "";
+        }
+      }
+      envoltorio.append(tabela);
+      destino.append(envoltorio);
+    }
+
+    function dataHora(valor) {
+      return valor ? new Date(valor).toLocaleString("pt-BR") : "";
+    }
+
+    function etiqueta(texto) {
+      const span = document.createElement("span");
+      span.className = "etiqueta";
+      span.textContent = texto;
+      if (texto === "ATRASADO") { span.style.background = "var(--erro-fundo)"; span.style.color = "var(--erro)"; }
+      return span;
+    }
+
+    async function executar(acao, id, corpo) {
+      try {
+        await api(`/api/chamados/${id}/${acao}`, { method: "POST", body: JSON.stringify(corpo || {}) });
+        mostrarMensagem(`Chamado ${id}: ação "${acao}" concluída.`);
+        await carregar();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    function botao(texto, aoClicar, secundario = false) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = texto;
+      if (secundario) b.className = "secundario";
+      b.addEventListener("click", aoClicar);
+      return b;
+    }
+
+    function acoes(chamado) {
+      const caixa = document.createElement("div");
+      caixa.style.display = "flex";
+      caixa.style.gap = "6px";
+      caixa.style.flexWrap = "wrap";
+      if (chamado.situacao === "ABERTO") {
+        const campo = document.createElement("input");
+        campo.placeholder = "Responsável";
+        campo.maxLength = 200;
+        caixa.append(campo, botao("Assumir", () => executar("assumir", chamado.id, { responsavel: campo.value })));
+      } else if (chamado.situacao === "EM_ATENDIMENTO") {
+        const campo = document.createElement("input");
+        campo.placeholder = "Solução";
+        campo.maxLength = 2000;
+        caixa.append(campo, botao("Resolver", () => executar("resolver", chamado.id, { solucao: campo.value })));
+      } else if (chamado.situacao === "RESOLVIDO") {
+        caixa.append(botao("Fechar", () => executar("fechar", chamado.id)),
+                     botao("Reabrir", () => executar("reabrir", chamado.id), true));
+      } else {
+        caixa.textContent = "—";
+      }
+      return caixa;
+    }
+
+    async function carregar() {
+      try {
+        const fila = await api("/api/fila");
+        desenharTabela(document.getElementById("fila"), [
+          { titulo: "Nº", valor: (c) => String(c.id) },
+          { titulo: "Título", valor: (c) => c.titulo },
+          { titulo: "Prioridade", valor: (c) => c.prioridade },
+          { titulo: "Situação", valor: (c) => c.situacao },
+          { titulo: "Responsável", valor: (c) => c.responsavel || "" },
+          { titulo: "Prazo", valor: (c) => dataHora(c.prazo_em) },
+          { titulo: "Indicação", valor: (c) => etiqueta(c.indicacao) },
+        ], fila, "Nenhum chamado pendente.");
+        const todos = await api("/api/chamados");
+        desenharTabela(document.getElementById("chamados"), [
+          { titulo: "Nº", valor: (c) => String(c.id) },
+          { titulo: "Título", valor: (c) => c.titulo },
+          { titulo: "Solicitante", valor: (c) => `${c.solicitante_nome} (${c.solicitante_email})` },
+          { titulo: "Categoria", valor: (c) => c.categoria },
+          { titulo: "Prioridade", valor: (c) => c.prioridade },
+          { titulo: "Situação", valor: (c) => etiqueta(c.situacao) },
+          { titulo: "Abertura", valor: (c) => dataHora(c.aberto_em) },
+          { titulo: "Prazo", valor: (c) => dataHora(c.prazo_em) },
+          { titulo: "Resolução", valor: (c) => dataHora(c.resolvido_em) },
+          { titulo: "Ações", valor: acoes },
+        ], todos, "Nenhum chamado cadastrado.");
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    }
+
+    document.getElementById("form-abrir").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      try {
+        const criado = await api("/api/chamados", { method: "POST", body: JSON.stringify(lerFormulario(evento.target)) });
+        mostrarMensagem(`Chamado ${criado.id} aberto. Prazo: ${dataHora(criado.prazo_em)}.`);
+        evento.target.reset();
+        await carregar();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    document.getElementById("form-relatorio").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      try {
+        const filtro = new URLSearchParams(lerFormulario(evento.target));
+        const dados = await api("/api/relatorio?" + filtro.toString());
+        desenharTabela(document.getElementById("relatorio"), [
+          { titulo: "Prioridade", valor: (l) => l.prioridade },
+          { titulo: "Resolvidos", valor: (l) => String(l.resolvidos) },
+          { titulo: "Dentro do prazo", valor: (l) => String(l.dentro_do_prazo) },
+          { titulo: "% dentro do prazo", valor: (l) => l.percentual_dentro_do_prazo === null ? "—" : l.percentual_dentro_do_prazo + "%" },
+        ], dados.prioridades);
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    document.getElementById("atualizar").addEventListener("click", carregar);
+
+    carregar();
+  </script>
+</body>
+</html>

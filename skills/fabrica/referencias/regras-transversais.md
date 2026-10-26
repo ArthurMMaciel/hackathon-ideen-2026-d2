@@ -2,6 +2,19 @@
 
 Valem para todas as etapas e para qualquer pedido.
 
+## Precedência
+
+**O pedido prevalece sobre estas regras.** Se o pedido manda algo diferente (ex.: "só despesa pendente pode ser excluída" contra "não apague registros"), siga o pedido e registre a escolha como premissa `PR-xx`.
+
+## Faixas de valores
+
+Use os tipos de `app/tipos.py`. Eles já aplicam estas faixas e evitam HTTP 500:
+
+- ids entre 1 e 2.147.483.647;
+- anos entre 2000 e 2100 em datas e datas com hora;
+- textos sem espaços nas pontas, não vazios, até 200 caracteres (`TextoLongo`: 2000);
+- dinheiro em centavos, inteiro.
+
 ## Rastreabilidade
 
 | Prefixo | O que é | Onde nasce |
@@ -23,22 +36,36 @@ Valem para todas as etapas e para qualquer pedido.
 - **Nunca leia o relógio do sistema direto nas regras.** Use o relógio injetável do modelo de projeto (`obter_agora`), que os testes substituem e que a variável `APP_AGORA` fixa no servidor real. Toda regra com "passado", "futuro" ou "hoje" depende disso.
 - Durações e limites com borda explícita nos testes: o valor mínimo, o máximo, um abaixo e um acima.
 
+## Datas sem horário
+
+Quando o pedido fala em dias de calendário (data de despesa, período de férias, prazo em dias):
+
+- Use o tipo `Data` (`AAAA-MM-DD`, sem horário e sem fuso). Grave como texto `AAAA-MM-DD`, sem converter para UTC.
+- "Hoje" é `agora.date()` no fuso padrão, com `agora` vindo do relógio injetável.
+- Períodos de dias são fechados `[início, fim]` quando o pedido conta o primeiro e o último dia. Sobreposição: `a.inicio <= b.fim e b.inicio <= a.fim`. Dias seguidos (`fim + 1 dia == início`) não se sobrepõem.
+- Quantidade de dias de um período fechado: `(fim - inicio).days + 1`.
+
 ## Erros da API
 
-- Validação de formato (campo faltando, tipo errado): `422`, padrão do framework.
-- Regra de negócio violada: `422`, com corpo `{"erro": "<CODIGO>", "mensagem": "<texto em português>"}`.
-- Conflito com estado existente (sobreposição, duplicidade): `409`, mesmo formato de corpo.
+- Validação de formato (campo faltando, tipo errado, fora da faixa): `422`, padrão do framework.
+- Para decidir entre `409` e `422` numa regra de negócio, pergunte: **a mesma requisição seria aceita se o estado guardado fosse outro?**
+  - Sim → `409` (`conflito`): já emprestado, já cancelado, transição de situação inválida, duplicidade, sobreposição, limite de itens em aberto, fila cheia.
+  - Não → `422` (`regra_violada`): duração, prazo, valor acima do limite, data no passado, campo obrigatório de negócio vazio.
+- Corpo de erro de negócio: `{"erro": "<CODIGO>", "mensagem": "<texto em português>"}`.
 - Recurso inexistente: `404`, mesmo formato de corpo.
+- Campo que o pedido diz ser exigido só em uma ação (ex.: motivo da recusa) é opcional no modelo Pydantic e validado no domínio, para a recusa sair com código de negócio.
 - A mensagem cita a regra violada em linguagem simples. Não exponha stack trace nem SQL.
 
 ## Estado e histórico
 
-- Não apague registros de negócio. Cancelamento e inativação mudam o status e mantêm o histórico.
+- Não apague registros de negócio, salvo se o pedido mandar excluir. Cancelamento e inativação mudam o status e mantêm o histórico.
 - Status como enum em texto maiúsculo, com os nomes do pedido (`ATIVA`, `CANCELADA`).
 
 ## Dados iniciais
 
 - Se o pedido fala em dados que "já começam cadastrados", crie uma carga inicial idempotente que roda ao iniciar a aplicação com banco vazio.
+- Datas dos dados iniciais são relativas ao `agora` que `carga_inicial(conn, agora)` recebe. Nunca fixe datas absolutas nem leia o relógio do sistema ali.
+- Testes não dependem dos dados iniciais além do que o pedido garante (quantidade e distribuição). Cada teste cria os registros que confere.
 - Dados iniciais são fictícios e plausíveis. Nada de nome, e-mail ou documento de pessoa real.
 
 ## Idioma

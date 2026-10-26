@@ -138,6 +138,85 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Iniciou a primeira execução completa num subagente com contexto limpo, num diretório só com `skills/` e `PEDIDO.md`, usando o prompt exato da banca.
 - **[D]** Resultado em análise. *(Pendente)*
 
+## D-14 · Rodada 01: cinco pedidos novos em paralelo
+
+- **[P]** Viu a tela gerada pela execução em andamento e questionou a qualidade e a origem dela. Depois pediu cerca de 5 testes novos, rodados por subagentes, com pedidos e resultados salvos, para melhorar o pacote a partir dos resultados.
+- **[IA]** Confirmou que a tela veio da execução completa (gates 1 a 4 aprovados naquele momento). Avaliação crítica da tela: funcional e com XSS bloqueado, mas visual cru, tabela que transborda e um "Failed to fetch" provavelmente causado pelo servidor sendo derrubado pela verificação.
+- **[IA]** Escreveu 5 pedidos novos em `evidencias/testes-pacote/pedidos/`, cada um forçando um tipo de regra diferente: estado de item e limites por tipo (P01), dinheiro e fluxo de aprovação (P02), lista de espera (P03), datas sem horário e restrição por equipe (P04), prazo em horas e máquina de estados (P05).
+- **[IA]** Corrigiu o harness de verificação, que usava a porta fixa 8765 e colidiria em execuções paralelas. Agora escolhe uma porta livre. Testado.
+- **[IA]** Commit `31c3c44` enviado. O GitHub avisou que a `main` exige pull request e que a regra foi contornada pela permissão da conta. Daqui em diante, nada vai direto para a `main` sem decisão do participante.
+- **[IA]** Disparou as 5 execuções em subagentes paralelos, cada uma num diretório limpo e com o prompt da banca.
+- **[D]** Rodada 01 em andamento: P00 (treino) mais P01 a P05. *(Decidido por: participante)*
+
+## D-15 · Resultado da rodada 01 e melhorias propostas
+
+- **[IA]** As seis execuções terminaram: 36/36 gates, 390/390 testes, 60/60 critérios de aceite verificados via HTTP e nenhum ajuste manual. Artefatos e relatos em `evidencias/testes-pacote/rodadas/rodada-01/`.
+- **[IA]** Cruzou os relatos dos seis agentes e montou a matriz de recorrência em `evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md`. Seis problemas apareceram em todas as execuções; quatro deles foram causados pelo modelo de projeto escrito pela IA (ver E-05 a E-08).
+- **[IA]** Propôs 12 melhorias (M1 a M12), ordenadas por impacto. Não aplicadas, aguardando o participante.
+- **[P]** Aprovou as 12 melhorias e pediu a rodada 02 com os 6 pedidos em paralelo.
+- **[D]** M1 a M12 aprovadas. *(Decidido por: participante)*
+
+## D-16 · Melhorias M1 a M12 aplicadas (skills v2)
+
+- **[IA]** Às 07:14 de 26/10, alertou que o prazo é 09:00 do mesmo dia e que `gerado/` e o `README.md` final ainda não estavam no repositório. Criou a branch `rodada-02` para não enviar mais nada direto à `main`.
+- **[IA]** Modelo de projeto:
+  - **M1:** stack atualizada para fastapi 0.162.0, starlette 1.10.0, uvicorn 0.54.0, pytest 9.1.1, com todas as dependências transitivas fixadas. `pip-audit` no `requirements.txt`: nenhuma vulnerabilidade conhecida.
+  - **M2:** tela servida com `HTMLResponse`.
+  - **M3:** `app/tipos.py` com `Id`, `DataHora`, `Data`, `Texto`, `TextoLongo`, `Email` e `Centavos`.
+  - **M4:** erros de negócio movidos para `app/dominio/erros.py`, sem FastAPI.
+  - **M5:** `carga_inicial(conn, agora)`, com o ciclo de vida usando o mesmo relógio das rotas.
+  - **M9:** harness em porta livre e saída UTF-8, com `resumo()` dos campos conferidos e linhas ordenadas; novo `subida_manual.py`.
+  - **M11:** CSS e funções de tela prontas (`mostrarMensagem`, `lerFormulario`, `desenharTabela`).
+  - **Testes:** novos testes dos tipos e do relógio da carga inicial. O modelo passou com 12 testes, verificação e subida manual.
+- **[IA]** Skills e regras:
+  - **M6:** o pedido prevalece sobre as regras; seção de datas sem horário; teste de decisão 409 ou 422.
+  - **M7:** testes em lote, com a rodada de falhas registrada no log e exigida no gate.
+  - **M8:** proibição de escrever fora da pasta de trabalho; horários lidos do relógio.
+  - **M10:** checklists ajustados (valores extremos, conferência da tela sem navegador, grep de SQL, `.gitignore`, `pip-audit`).
+  - **M12:** lacunas novas na concepção e limite do PRD em 70 linhas de itens.
+- **[D]** Skills v2 prontas para a rodada 02. *(Decidido por: participante)*
+- **[IA]** Preparou a entrega como rede de segurança na branch `rodada-02` (README com os cinco itens, `gerado/` e evidências da rodada 01) e propôs enviar a branch e abrir o PR antes do fim da rodada 02.
+- **[P]** Decidiu esperar a rodada 02 terminar antes de enviar a branch e abrir o PR.
+
+## D-17 · Estrutura do repositório
+
+- **[P]** Perguntou se o diário pode ficar em `evidencias/` e se pastas fora do esqueleto do kit são aceitas, pedindo confirmação sem edição.
+- **[IA]** Conferiu o slide 12 e o README do kit: os obrigatórios são `skills/`, `gerado/`, `evidencias/` e `README.md`, sem proibição de pastas extras. O diário é evidência de uso de IA e cabe em `evidencias/`. Apontou o risco de a banca não abrir `testes-pacote/`, que estava fora do esqueleto, e sugeriu movê-la para dentro de `evidencias/`.
+- **[D]** `testes-pacote/` movida para `evidencias/testes-pacote/`, com links do README e do diário ajustados. *(Decidido por: participante)*
+
+## D-18 · Resultado da rodada 02 e troca da entrega para a v2
+
+- **[P]** Perguntou por que as execuções demoram.
+- **[IA]** Explicou o volume de cada execução (de 40 a 90 testes, duas instalações completas, revisões com sondas, servidor real) e a disputa de máquina com 6 em paralelo. Recomendou não mudar regras no meio da rodada, para manter a comparação válida.
+- **[IA]** As seis execuções terminaram entre 07:48 e 07:51: 36/36 gates, 497/497 testes, 60/60 critérios via HTTP, nenhum ajuste manual e nenhuma pendência. Comparada à rodada 01: zero vulnerabilidades no `pip-audit`, nenhum HTTP 500 com valores extremos, testes antes do código com evidência em todas, e cerca de 23% menos chamadas de ferramenta. Consolidado em `evidencias/testes-pacote/rodadas/rodada-02/RESULTADOS.md`.
+- **[IA]** Trocou `gerado/` e as evidências da raiz de `evidencias/` pela execução P00 da rodada 02 (skills v2). Atualizou o README com a comparação entre rodadas.
+- **[IA]** Novas fricções da v2 listadas como candidatas a uma rodada 03, a principal sendo um exemplo contraditório na regra 409 ou 422 (E-10). Não aplicadas, pelo prazo.
+- **[D]** Entrega atualizada para a v2. Envio da branch e PR aguardando o participante. *(Pendente)*
+
+## D-19 · Skill `evolucao`: pedidos que chegam em pedaços
+
+- **[P]** Questionou se cada mensagem do usuário levaria 25 minutos. Apontou que, fora do hackathon, o usuário raramente pede tudo num prompt só, e que tratar isso seria um diferencial. Disse que velocidade é muito importante e que uma alteração não deve levar 15 minutos.
+- **[IA]** Esclareceu que os 25 minutos são a construção completa do zero, mas reconheceu a lacuna: o pacote não tinha caminho para mudança incremental. Propôs a skill `evolucao`.
+- **[IA]** Escreveu `skills/evolucao/SKILL.md`, pensada para velocidade: lê só PRD, SPEC e os arquivos tocados; reaproveita o `.venv`; PRD e SPEC por delta com numeração continuada; testes da mudança antes do código; suíte inteira contra regressão; verificação HTTP; bloco no `evidencias/log-evolucao.md` com horários reais. A `fabrica` passou a desviar para a `evolucao` quando já existe `gerado/docs/PRD.md`.
+- **[IA]** Iniciou o teste às 08:00 sobre o sistema P02 da rodada 02, com uma mensagem de mudança em linguagem natural (editar despesa pendente e contagem por categoria no resumo).
+- **[IA]** Resultado: 5 min 7 s (08:00:56 a 08:06:03), 9 códigos novos, 11 testes da mudança falhando antes do código, 92 testes passando depois, 15/15 critérios via HTTP, nenhum teste antigo alterado. Evidência em `evidencias/testes-pacote/evolucao/`.
+- **[D]** Skill `evolucao` mantida no pacote. *(Decidido por: participante)*
+
+## D-20 · Revisão do README
+
+- **[P]** Pediu para repassar o README depois da evolução.
+- **[IA]** Revisão crítica com 7 pontos, aplicados:
+  - declarar que o prompt da banca foi enviado com notas de ambiente;
+  - declarar que a instalação em `.claude/skills/` não foi testada;
+  - incluir a `evolucao` e o tempo medido;
+  - declarar os bônus, inclusive o não feito (dois agentes);
+  - encurtar o texto;
+  - comandos para Windows e Linux;
+  - avisar que `verificar_ca.py` reescreve a evidência.
+- **[P]** Pediu comandos para Windows, Linux e macOS.
+- **[IA]** README com três blocos de comandos (`python3` no Linux e no macOS, mais as dicas de instalação). As skills `fabrica`, `stack-padrao` e `construcao` passaram a prever `python3` e a exigir os três blocos no `gerado/README.md` dos próximos sistemas. O `gerado/README.md` atual não foi editado, para manter "nenhum ajuste manual" no sistema gerado; o README da raiz cobre os três sistemas.
+- **[D]** README final aguardando leitura do participante. *(Pendente)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
@@ -147,4 +226,10 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 | E-01 | Proposta de stack (D-04) | A IA apresentou as opções de stack como escolha entre "Python" e "Node" sem deixar claro que ambas incluíam a tela web. A apresentação levou o participante a entender que poderia ser só API. | O participante questionou. A IA refez a explicação com uma tabela por camada (API, banco, testes, tela) e explicitou que a tela é requisito do pedido. |
 | E-02 | Skill `concepcao` (D-09) | A IA fixou "cerca de 60 linhas" para o PRD sem conferir contra o próprio modelo de 9 seções em tabela. Num pedido pequeno o PRD já passa de 70 linhas. | Detectado na calibração 01. Correção proposta em D-10. |
 | E-03 | Skills `fabrica` e `concepcao` | A IA escreveu dois gates diferentes para a mesma etapa (4 itens na `fabrica`, 7 na `concepcao`), sem dizer qual vale. | Detectado na calibração 01. Correção proposta em D-10. |
-| E-04 | Skill `concepcao` | O item de gate "toda lacuna virou premissa" depende só do julgamento do agente, então não pode ser verificado. | Detectado na calibração 01. Correção proposta em D-10. |
+| E-04 | Skill `concepcao` | O item de gate "toda lacuna virou premissa" depende só do julgamento do agente, então não pode ser verificado. | Detectado na calibração 01. Corrigido em D-11 com a tabela de lacunas no log. |
+| E-05 | Modelo de projeto | A IA serviu a tela com `FileResponse`, exposto à CVE-2025-62727 na versão fixada do starlette, e fixou versões com CVEs conhecidas sem rodar `pip-audit` antes. | As seis execuções da rodada 01 acharam e contornaram o problema sozinhas. Correção proposta em M1 e M2. |
+| E-06 | Modelo de projeto | A IA não limitou ids nem anos, e o SQLite e a conversão para UTC geram HTTP 500 com valores extremos. | Achado pela revisão em todas as execuções. Correção proposta em M3. |
+| E-07 | Modelo de projeto e skill `revisao` | A IA colocou as exceções de negócio num módulo que importa FastAPI e, na revisão, exigiu domínio sem FastAPI. As duas instruções se contradizem. | Apontado em todas as execuções. Correção proposta em M4. |
+| E-08 | Skill `construcao` | A IA exigiu TDD um teste por vez, caro demais e impossível de verificar no gate. Nenhum agente seguiu. | Correção proposta em M7: lote de testes com rodada de falhas registrada. |
+| E-09 | Pedido de teste P04 | A IA escreveu um pedido com regras de saldo que se contradizem. | O agente da execução percebeu e resolveu com premissa e teste. Motivou a lacuna nova de M12. |
+| E-10 | Regras transversais (v2) | A IA deu "prazo" e "data no passado" como exemplos de 422, contradizendo o teste de decisão que ela mesma escreveu quando o prazo depende de dado guardado. | Apontado por quatro agentes da rodada 02, que escolheram 409 de forma consistente. Correção listada para uma rodada 03. |
