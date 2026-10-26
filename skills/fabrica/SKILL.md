@@ -19,6 +19,7 @@ Você vai levar um pedido em linguagem natural até um sistema funcionando, perc
 
 ## Etapa 0 · Preparação
 
+0. **Construção ou evolução?** Se `gerado/docs/PRD.md` já existe e o pedido é alterar, adicionar ou corrigir algo no sistema existente, não siga esta skill: use a skill `evolucao` (`../evolucao/SKILL.md`), que aplica a mudança sem refazer o sistema.
 1. Localize o pedido, nesta ordem: o arquivo citado no prompt; `PEDIDO.md` na raiz; o único `PEDIDO*.md` na raiz; o texto do próprio prompt. Registre qual foi usado.
 2. Confirme o ambiente com `python --version` (exige 3.11 ou superior). Se faltar, registre no log e pare com a mensagem de erro. Essa é a única parada permitida.
 3. Crie `gerado/` e `evidencias/` se não existirem.

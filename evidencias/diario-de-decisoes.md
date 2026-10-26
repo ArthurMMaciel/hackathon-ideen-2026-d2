@@ -193,6 +193,14 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Novas fricções da v2 listadas como candidatas a uma rodada 03, a principal sendo um exemplo contraditório na regra 409 ou 422 (E-10). Não aplicadas, pelo prazo.
 - **[D]** Entrega atualizada para a v2. Envio da branch e PR aguardando o participante. *(Pendente)*
 
+## D-19 · Skill `evolucao`: pedidos que chegam em pedaços
+
+- **[P]** Questionou se cada mensagem do usuário levaria 25 minutos. Apontou que, fora do hackathon, o usuário raramente pede tudo num prompt só, e que tratar isso seria um diferencial. Disse que velocidade é muito importante e que uma alteração não deve levar 15 minutos.
+- **[IA]** Esclareceu que os 25 minutos são a construção completa do zero, mas reconheceu a lacuna: o pacote não tinha caminho para mudança incremental. Propôs a skill `evolucao`.
+- **[IA]** Escreveu `skills/evolucao/SKILL.md`, pensada para velocidade: lê só PRD, SPEC e os arquivos tocados; reaproveita o `.venv`; PRD e SPEC por delta com numeração continuada; testes da mudança antes do código; suíte inteira contra regressão; verificação HTTP; bloco no `evidencias/log-evolucao.md` com horários reais. A `fabrica` passou a desviar para a `evolucao` quando já existe `gerado/docs/PRD.md`.
+- **[IA]** Iniciou o teste às 08:00 sobre o sistema P02 da rodada 02, com uma mensagem de mudança em linguagem natural (editar despesa pendente e contagem por categoria no resumo).
+- **[D]** Resultado e tempo em análise. *(Pendente)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
