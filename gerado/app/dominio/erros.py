@@ -1,7 +1,11 @@
-"""Erros de negócio no formato {"erro": CODIGO, "mensagem": texto}."""
+"""Erros de negócio. Módulo puro: o domínio levanta daqui sem depender de FastAPI.
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
+Escolha do status (regras transversais):
+- 409: a mesma requisição seria aceita se o estado guardado fosse outro (já emprestado, já cancelado,
+  transição inválida, duplicidade, sobreposição, limite de itens em aberto).
+- 422: a requisição é inválida em qualquer estado (prazo, valor, duração, campo obrigatório de negócio).
+- 404: o recurso não existe.
+"""
 
 
 class ErroNegocio(Exception):
@@ -22,7 +26,3 @@ def conflito(codigo: str, mensagem: str) -> ErroNegocio:
 
 def nao_encontrado(codigo: str, mensagem: str) -> ErroNegocio:
     return ErroNegocio(404, codigo, mensagem)
-
-
-async def tratar_erro_negocio(request: Request, exc: ErroNegocio) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content={"erro": exc.codigo, "mensagem": exc.mensagem})

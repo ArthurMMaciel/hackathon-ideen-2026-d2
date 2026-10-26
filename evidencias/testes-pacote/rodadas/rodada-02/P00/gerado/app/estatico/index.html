@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reserva de salas</title>
+  <style>
+    :root {
+      --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1f2933; --suave: #616e7c; --borda: #d9dee4;
+      --primaria: #2459c7; --primaria-escura: #1b4497; --ok: #1d7a46; --ok-fundo: #e6f4ec;
+      --erro: #b42318; --erro-fundo: #fdecea; --raio: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background: var(--cartao); border-bottom: 1px solid var(--borda); padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 1080px; font-size: 20px; }
+    main { margin: 0 auto; max-width: 1080px; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; }
+    form, .filtros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+    input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); width: 100%; }
+    button { font: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--primaria); color: #fff; cursor: pointer; }
+    button:hover { background: var(--primaria-escura); }
+    button.secundario { background: #e4e8ee; color: var(--texto); }
+    .tabela { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 480px; }
+    th, td { border-bottom: 1px solid var(--borda); padding: 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--suave); font-weight: 600; }
+    .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4e8ee; font-size: 12px; font-weight: 600; }
+    .mensagem { padding: 10px 12px; border-radius: 8px; }
+    .mensagem.ok { background: var(--ok-fundo); color: var(--ok); }
+    .mensagem.erro { background: var(--erro-fundo); color: var(--erro); }
+    .vazio { color: var(--suave); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><h1>Reserva de salas</h1></header>
+  <main>
+    <div id="mensagem" class="mensagem" hidden></div>
+    <section>
+      <h2>Nova reserva</h2>
+      <form id="form-reserva">
+        <label>Sala <select name="sala_id" id="sala-reserva" required></select></label>
+        <label>Responsável <input name="responsavel_nome" maxlength="200" required></label>
+        <label>E-mail <input name="responsavel_email" type="email" maxlength="254" required></label>
+        <label>Título <input name="titulo" maxlength="200" required></label>
+        <label>Participantes <input name="participantes" type="number" min="1" max="1000" value="2" required></label>
+        <label>Início <input name="inicio" type="datetime-local" required></label>
+        <label>Fim <input name="fim" type="datetime-local" required></label>
+        <button type="submit">Reservar</button>
+      </form>
+    </section>
+    <section>
+      <h2>Agenda do dia por sala</h2>
+      <form id="form-agenda">
+        <label>Dia <input name="dia" type="date" id="dia-agenda" required></label>
+        <label>Sala <select name="sala_id" id="sala-agenda"><option value="">Todas</option></select></label>
+        <button type="submit">Ver agenda</button>
+      </form>
+      <div id="agenda"></div>
+    </section>
+    <section>
+      <h2>Salas livres</h2>
+      <form id="form-livres">
+        <label>Início <input name="inicio" type="datetime-local" required></label>
+        <label>Fim <input name="fim" type="datetime-local" required></label>
+        <label>Local
+          <select name="local">
+            <option value="">Todos</option>
+            <option value="SAO_PAULO">São Paulo</option>
+            <option value="ARARAQUARA">Araraquara</option>
+            <option value="COWORKING">Coworking</option>
+          </select>
+        </label>
+        <label>Capacidade mínima <input name="capacidade_minima" type="number" min="1" max="1000"></label>
+        <button type="submit">Buscar</button>
+      </form>
+      <div id="livres"></div>
+    </section>
+    <section>
+      <h2>Ocupação do dia (8h às 18h)</h2>
+      <form id="form-ocupacao">
+        <label>Dia <input name="dia" type="date" id="dia-ocupacao" required></label>
+        <button type="submit">Calcular</button>
+      </form>
+      <div id="ocupacao"></div>
+    </section>
+  </main>
+  <script>
+    // Dados da API entram sempre por textContent; nunca por innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        const detalhe = corpo && Array.isArray(corpo.detail) ? corpo.detail.map((d) => d.msg).join("; ") : null;
+        throw new Error((corpo && corpo.mensagem) || detalhe || resposta.statusText);
+      }
+      return corpo;
+    }
+
+    function mostrarMensagem(texto, tipo = "ok") {
+      const caixa = document.getElementById("mensagem");
+      caixa.textContent = texto;
+      caixa.className = "mensagem " + tipo;
+      caixa.hidden = false;
+    }
+
+    // Lê os campos de um <form> num objeto; campos type=number viram número, vazios ficam de fora.
+    function lerFormulario(form) {
+      const dados = {};
+      for (const campo of form.elements) {
+        if (!campo.name || campo.value === "") continue;
+        dados[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value;
+      }
+      return dados;
+    }
+
+    // Monta uma tabela dentro de `destino`. colunas: [{titulo, valor: (linha) => texto}].
+    function desenharTabela(destino, colunas, linhas, textoVazio = "Nada para mostrar.") {
+      destino.replaceChildren();
+      if (!linhas.length) {
+        const p = document.createElement("p");
+        p.className = "vazio";
+        p.textContent = textoVazio;
+        destino.append(p);
+        return;
+      }
+      const envoltorio = document.createElement("div");
+      envoltorio.className = "tabela";
+      const tabela = document.createElement("table");
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const coluna of colunas) {
+        const th = document.createElement("th");
+        th.textContent = coluna.titulo;
+        cabecalho.append(th);
+      }
+      const corpo = tabela.createTBody();
+      for (const linha of linhas) {
+        const tr = corpo.insertRow();
+        for (const coluna of colunas) {
+          const valor = coluna.valor(linha);
+          const td = tr.insertCell();
+          if (valor instanceof Node) td.append(valor);
+          else td.textContent = valor ?? "";
+        }
+      }
+      envoltorio.append(tabela);
+      destino.append(envoltorio);
+    }
+
+    // Fuso padrão do sistema (America/Sao_Paulo, sem horário de verão): o datetime-local ganha o offset.
+    const OFFSET = "-03:00";
+    const comFuso = (valor) => (valor ? valor + ":00" + OFFSET : valor);
+    const hora = (iso) => iso.slice(11, 16);
+    const dataDe = (iso) => iso.slice(0, 10);
+    const NOMES_LOCAL = { SAO_PAULO: "São Paulo", ARARAQUARA: "Araraquara", COWORKING: "Coworking" };
+
+    function hojeLocal() {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    }
+
+    function etiqueta(texto) {
+      const span = document.createElement("span");
+      span.className = "etiqueta";
+      span.textContent = texto;
+      return span;
+    }
+
+    async function carregarSalas() {
+      const salas = await api("/api/salas");
+      for (const id of ["sala-reserva", "sala-agenda"]) {
+        const select = document.getElementById(id);
+        for (const sala of salas) {
+          const opcao = document.createElement("option");
+          opcao.value = sala.id;
+          opcao.textContent = `${sala.nome} (${NOMES_LOCAL[sala.local]}, ${sala.capacidade} lugares)`;
+          select.append(opcao);
+        }
+      }
+    }
+
+    async function carregarAgenda() {
+      const form = document.getElementById("form-agenda");
+      const filtros = new URLSearchParams(lerFormulario(form));
+      const reservas = await api("/api/reservas?" + filtros.toString());
+      desenharTabela(document.getElementById("agenda"), [
+        { titulo: "Sala", valor: (r) => r.sala_nome },
+        { titulo: "Horário", valor: (r) => `${dataDe(r.inicio)} ${hora(r.inicio)} – ${hora(r.fim)}` },
+        { titulo: "Título", valor: (r) => r.titulo },
+        { titulo: "Responsável", valor: (r) => `${r.responsavel_nome} <${r.responsavel_email}>` },
+        { titulo: "Participantes", valor: (r) => String(r.participantes) },
+        { titulo: "Status", valor: (r) => etiqueta(r.status) },
+        { titulo: "", valor: (r) => (r.status === "ATIVA" ? botaoCancelar(r) : "") },
+      ], reservas, "Nenhuma reserva neste dia.");
+    }
+
+    function botaoCancelar(reserva) {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "secundario";
+      botao.textContent = "Cancelar";
+      botao.addEventListener("click", async () => {
+        try {
+          await api(`/api/reservas/${reserva.id}/cancelar`, { method: "POST" });
+          mostrarMensagem("Reserva cancelada.");
+          await carregarAgenda();
+        } catch (e) {
+          mostrarMensagem("Erro: " + e.message, "erro");
+        }
+      });
+      return botao;
+    }
+
+    document.getElementById("form-reserva").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const dados = lerFormulario(evento.target);
+      dados.sala_id = Number(dados.sala_id);
+      dados.inicio = comFuso(dados.inicio);
+      dados.fim = comFuso(dados.fim);
+      try {
+        const reserva = await api("/api/reservas", { method: "POST", body: JSON.stringify(dados) });
+        mostrarMensagem(`Reserva criada (${reserva.status}) em ${reserva.sala_nome}.`);
+        document.getElementById("dia-agenda").value = dataDe(reserva.inicio);
+        await carregarAgenda();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    document.getElementById("form-agenda").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      try { await carregarAgenda(); } catch (e) { mostrarMensagem("Erro: " + e.message, "erro"); }
+    });
+
+    document.getElementById("form-livres").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const dados = lerFormulario(evento.target);
+      dados.inicio = comFuso(dados.inicio);
+      dados.fim = comFuso(dados.fim);
+      try {
+        const salas = await api("/api/salas/livres?" + new URLSearchParams(dados).toString());
+        desenharTabela(document.getElementById("livres"), [
+          { titulo: "Sala", valor: (s) => s.nome },
+          { titulo: "Local", valor: (s) => NOMES_LOCAL[s.local] },
+          { titulo: "Capacidade", valor: (s) => String(s.capacidade) },
+          { titulo: "Recursos", valor: (s) => s.recursos.join(", ") },
+        ], salas, "Nenhuma sala livre com esses filtros.");
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    document.getElementById("form-ocupacao").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      try {
+        const relatorio = await api("/api/relatorios/ocupacao?" + new URLSearchParams(lerFormulario(evento.target)));
+        desenharTabela(document.getElementById("ocupacao"), [
+          { titulo: "Sala", valor: (l) => l.sala_nome },
+          { titulo: "Local", valor: (l) => NOMES_LOCAL[l.local] },
+          { titulo: "Minutos ocupados", valor: (l) => String(l.minutos_ocupados) },
+          { titulo: "Ocupação (%)", valor: (l) => String(l.taxa_ocupacao) },
+        ], relatorio.salas);
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    document.getElementById("dia-agenda").value = hojeLocal();
+    document.getElementById("dia-ocupacao").value = hojeLocal();
+    carregarSalas()
+      .then(carregarAgenda)
+      .catch((e) => mostrarMensagem("Erro: " + e.message, "erro"));
+  </script>
+</body>
+</html>

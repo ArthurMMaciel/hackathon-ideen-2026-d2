@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inscrição em treinamentos</title>
+  <style>
+    :root {
+      --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1f2933; --suave: #616e7c; --borda: #d9dee4;
+      --primaria: #2459c7; --primaria-escura: #1b4497; --ok: #1d7a46; --ok-fundo: #e6f4ec;
+      --erro: #b42318; --erro-fundo: #fdecea; --raio: 10px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background: var(--cartao); border-bottom: 1px solid var(--borda); padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 1080px; font-size: 20px; }
+    main { margin: 0 auto; max-width: 1080px; padding: 16px; display: grid; gap: 16px; }
+    section { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+    section h2 { margin: 0 0 12px; font-size: 16px; }
+    form, .filtros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+    label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+    input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); width: 100%; }
+    button { font: inherit; padding: 9px 14px; border: 0; border-radius: 8px; background: var(--primaria); color: #fff; cursor: pointer; }
+    button:hover { background: var(--primaria-escura); }
+    button.secundario { background: #e4e8ee; color: var(--texto); }
+    .tabela { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 480px; }
+    th, td { border-bottom: 1px solid var(--borda); padding: 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--suave); font-weight: 600; }
+    .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e4e8ee; font-size: 12px; font-weight: 600; }
+    .mensagem { padding: 10px 12px; border-radius: 8px; }
+    .mensagem.ok { background: var(--ok-fundo); color: var(--ok); }
+    .mensagem.erro { background: var(--erro-fundo); color: var(--erro); }
+    .vazio { color: var(--suave); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><h1>Inscrição em treinamentos</h1></header>
+  <main>
+    <div id="mensagem" class="mensagem" hidden></div>
+    <section>
+      <h2>Turmas futuras</h2>
+      <div id="turmas"><p class="vazio">Carregando...</p></div>
+    </section>
+    <section>
+      <h2>Inscrever-se</h2>
+      <form id="form-inscricao">
+        <label>Turma
+          <select name="turma_id" id="turma-select" required></select>
+        </label>
+        <label>Nome
+          <input name="nome" maxlength="200" required>
+        </label>
+        <label>E-mail
+          <input name="email" type="email" maxlength="254" required>
+        </label>
+        <button type="submit">Inscrever</button>
+      </form>
+    </section>
+    <section>
+      <h2 id="titulo-inscritos">Inscritos da turma</h2>
+      <div id="inscritos"><p class="vazio">Escolha uma turma em "Ver inscritos".</p></div>
+    </section>
+  </main>
+  <script>
+    // Dados da API entram sempre por textContent; nunca por innerHTML.
+    async function api(caminho, opcoes = {}) {
+      const resposta = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+      const corpo = resposta.status === 204 ? null : await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        const detalhe = corpo && Array.isArray(corpo.detail) ? corpo.detail.map((d) => d.msg).join("; ") : null;
+        throw new Error((corpo && corpo.mensagem) || detalhe || resposta.statusText);
+      }
+      return corpo;
+    }
+
+    function mostrarMensagem(texto, tipo = "ok") {
+      const caixa = document.getElementById("mensagem");
+      caixa.textContent = texto;
+      caixa.className = "mensagem " + tipo;
+      caixa.hidden = false;
+    }
+
+    // Lê os campos de um <form> num objeto; campos type=number viram número, vazios ficam de fora.
+    function lerFormulario(form) {
+      const dados = {};
+      for (const campo of form.elements) {
+        if (!campo.name || campo.value === "") continue;
+        dados[campo.name] = campo.type === "number" ? Number(campo.value) : campo.value;
+      }
+      return dados;
+    }
+
+    // Monta uma tabela dentro de `destino`. colunas: [{titulo, valor: (linha) => texto}].
+    function desenharTabela(destino, colunas, linhas, textoVazio = "Nada para mostrar.") {
+      destino.replaceChildren();
+      if (!linhas.length) {
+        const p = document.createElement("p");
+        p.className = "vazio";
+        p.textContent = textoVazio;
+        destino.append(p);
+        return;
+      }
+      const envoltorio = document.createElement("div");
+      envoltorio.className = "tabela";
+      const tabela = document.createElement("table");
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const coluna of colunas) {
+        const th = document.createElement("th");
+        th.textContent = coluna.titulo;
+        cabecalho.append(th);
+      }
+      const corpo = tabela.createTBody();
+      for (const linha of linhas) {
+        const tr = corpo.insertRow();
+        for (const coluna of colunas) {
+          const valor = coluna.valor(linha);
+          const td = tr.insertCell();
+          if (valor instanceof Node) td.append(valor);
+          else td.textContent = valor ?? "";
+        }
+      }
+      envoltorio.append(tabela);
+      destino.append(envoltorio);
+    }
+
+    let turmaSelecionada = null;
+    let turmasAtuais = [];
+
+    function formatarDataHora(iso) {
+      return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+    }
+
+    function etiqueta(texto) {
+      const span = document.createElement("span");
+      span.className = "etiqueta";
+      span.textContent = texto;
+      return span;
+    }
+
+    async function carregarTurmas() {
+      const turmas = await api("/api/turmas");
+      turmasAtuais = turmas;
+      desenharTabela(document.getElementById("turmas"), [
+        { titulo: "Título", valor: (t) => t.titulo },
+        { titulo: "Início", valor: (t) => formatarDataHora(t.inicio) },
+        { titulo: "Duração (min)", valor: (t) => String(t.duracao_minutos) },
+        { titulo: "Modalidade", valor: (t) => etiqueta(t.modalidade) },
+        { titulo: "Vagas", valor: (t) => String(t.vagas) },
+        { titulo: "Vagas restantes", valor: (t) => String(t.vagas_restantes) },
+        { titulo: "", valor: (t) => {
+            const botao = document.createElement("button");
+            botao.type = "button";
+            botao.className = "secundario";
+            botao.textContent = "Ver inscritos";
+            botao.addEventListener("click", () => {
+              turmaSelecionada = t;
+              carregarInscritos().catch((e) => mostrarMensagem("Erro: " + e.message, "erro"));
+            });
+            return botao;
+          } },
+      ], turmas, "Nenhuma turma futura.");
+
+      const select = document.getElementById("turma-select");
+      const anterior = select.value;
+      select.replaceChildren();
+      for (const t of turmas) {
+        const opcao = document.createElement("option");
+        opcao.value = String(t.id);
+        opcao.textContent = t.titulo + " · " + formatarDataHora(t.inicio) + " (" + t.vagas_restantes + " vagas)";
+        select.append(opcao);
+      }
+      if (anterior) select.value = anterior;
+    }
+
+    async function carregarInscritos() {
+      if (!turmaSelecionada) return;
+      document.getElementById("titulo-inscritos").textContent = "Inscritos da turma: " + turmaSelecionada.titulo;
+      const lista = await api("/api/turmas/" + turmaSelecionada.id + "/inscricoes");
+      desenharTabela(document.getElementById("inscritos"), [
+        { titulo: "Nome", valor: (i) => i.nome },
+        { titulo: "E-mail", valor: (i) => i.email },
+        { titulo: "Situação", valor: (i) => etiqueta(i.situacao) },
+        { titulo: "Posição na espera", valor: (i) => (i.posicao_espera ? String(i.posicao_espera) : "") },
+        { titulo: "Inscrito em", valor: (i) => formatarDataHora(i.criada_em) },
+      ], lista, "Nenhuma inscrição nesta turma.");
+    }
+
+    document.getElementById("form-inscricao").addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const form = evento.target;
+      const dados = lerFormulario(form);
+      dados.turma_id = Number(dados.turma_id);
+      try {
+        const inscricao = await api("/api/inscricoes", { method: "POST", body: JSON.stringify(dados) });
+        const texto = inscricao.situacao === "ESPERA"
+          ? "Inscrição em ESPERA (posição " + inscricao.posicao_espera + " na fila)."
+          : "Inscrição CONFIRMADA.";
+        mostrarMensagem(texto, "ok");
+        form.reset();
+        await carregarTurmas();
+        turmaSelecionada = turmasAtuais.find((t) => t.id === inscricao.turma_id) || turmaSelecionada;
+        await carregarInscritos();
+      } catch (e) {
+        mostrarMensagem("Erro: " + e.message, "erro");
+      }
+    });
+
+    carregarTurmas().catch((e) => mostrarMensagem("Erro: " + e.message, "erro"));
+  </script>
+</body>
+</html>

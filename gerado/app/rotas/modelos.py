@@ -1,60 +1,34 @@
-"""Modelos Pydantic de entrada e saída da API."""
+"""Modelos Pydantic de entrada e saída, com os tipos de app/tipos.py."""
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, AwareDatetime, BaseModel, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, Field
 
-# Identificadores cabem no inteiro de 64 bits do SQLite; acima disso o driver estoura (erro 500).
-ID_MAXIMO = 2**63 - 1
-Id = Annotated[int, Field(ge=1, le=ID_MAXIMO)]
-
-# PR-10: datas aceitas entre os anos 2000 e 2100; fora disso a conversão para UTC pode estourar.
-ANO_MINIMO, ANO_MAXIMO = 2000, 2100
-
-
-def _ano_suportado(valor):
-    if not ANO_MINIMO <= valor.year <= ANO_MAXIMO:
-        raise ValueError(f"o ano precisa estar entre {ANO_MINIMO} e {ANO_MAXIMO}")
-    return valor
-
-
-DataHora = Annotated[AwareDatetime, AfterValidator(_ano_suportado)]
-Data = Annotated[date, AfterValidator(_ano_suportado)]
+from app.tipos import DataHora, Email, Id, Texto
 
 Local = Literal["SAO_PAULO", "ARARAQUARA", "COWORKING"]
 Recurso = Literal["TV", "VIDEOCONFERENCIA", "QUADRO"]
-Status = Literal["ATIVA", "CANCELADA"]
-# PR-09: textos livres com até 200 caracteres, sem aceitar só espaços.
-Texto = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-# RN-11: e-mail no formato texto@dominio.ext, até 254 caracteres.
-Email = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
-]
+Capacidade = Annotated[int, Field(ge=1, le=1000)]  # RN-09
+Participantes = Annotated[int, Field(ge=1, le=1000)]  # RN-04 (mínimo 1)
+
+# Frações de segundo são descartadas na entrada: o valor validado é o mesmo que vai ao banco (SPEC).
+HorarioReserva = Annotated[DataHora, AfterValidator(lambda valor: valor.replace(microsecond=0))]
 
 
 class SalaEntrada(BaseModel):
     nome: Texto
     local: Local
-    capacidade: int = Field(ge=1, le=500)  # RN-10
-    recursos: list[Recurso] = Field(default_factory=list, max_length=3)
-
-    @field_validator("recursos")
-    @classmethod
-    def sem_repeticao(cls, recursos: list[str]) -> list[str]:
-        # RN-10: recursos sem repetição.
-        if len(set(recursos)) != len(recursos):
-            raise ValueError("recursos não podem se repetir")
-        return recursos
+    capacidade: Capacidade
+    recursos: Annotated[list[Recurso], Field(max_length=3)] = []
 
 
-class SalaSaida(BaseModel):
+class Sala(BaseModel):
     id: int
     nome: str
-    local: Local
+    local: str
     capacidade: int
-    recursos: list[Recurso]
+    recursos: list[str]
 
 
 class ReservaEntrada(BaseModel):
@@ -62,35 +36,34 @@ class ReservaEntrada(BaseModel):
     responsavel_nome: Texto
     responsavel_email: Email
     titulo: Texto
-    participantes: int = Field(ge=1, le=1000)  # RN-04 (limite inferior)
-    inicio: DataHora
-    fim: DataHora
+    participantes: Participantes
+    inicio: HorarioReserva
+    fim: HorarioReserva
 
 
-class ReservaSaida(BaseModel):
+class Reserva(BaseModel):
     id: int
     sala_id: int
+    sala_nome: str
     responsavel_nome: str
     responsavel_email: str
     titulo: str
     participantes: int
     inicio: datetime
     fim: datetime
-    status: Status
-    criada_em: datetime
-    cancelada_em: datetime | None
+    status: str
 
 
 class OcupacaoSala(BaseModel):
     sala_id: int
-    nome: str
-    local: Local
-    minutos_ocupados: int
+    sala_nome: str
+    local: str
+    minutos_ocupados: float
     taxa_ocupacao: float
 
 
-class RelatorioOcupacao(BaseModel):
-    data: date
+class Ocupacao(BaseModel):
+    dia: str
     janela_inicio: str
     janela_fim: str
     minutos_janela: int

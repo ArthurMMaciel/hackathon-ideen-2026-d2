@@ -184,6 +184,15 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Conferiu o slide 12 e o README do kit: os obrigatórios são `skills/`, `gerado/`, `evidencias/` e `README.md`, sem proibição de pastas extras. O diário é evidência de uso de IA e cabe em `evidencias/`. Apontou o risco de a banca não abrir `testes-pacote/`, que estava fora do esqueleto, e sugeriu movê-la para dentro de `evidencias/`.
 - **[D]** `testes-pacote/` movida para `evidencias/testes-pacote/`, com links do README e do diário ajustados. *(Decidido por: participante)*
 
+## D-18 · Resultado da rodada 02 e troca da entrega para a v2
+
+- **[P]** Perguntou por que as execuções demoram.
+- **[IA]** Explicou o volume de cada execução (de 40 a 90 testes, duas instalações completas, revisões com sondas, servidor real) e a disputa de máquina com 6 em paralelo. Recomendou não mudar regras no meio da rodada, para manter a comparação válida.
+- **[IA]** As seis execuções terminaram entre 07:48 e 07:51: 36/36 gates, 497/497 testes, 60/60 critérios via HTTP, nenhum ajuste manual e nenhuma pendência. Comparada à rodada 01: zero vulnerabilidades no `pip-audit`, nenhum HTTP 500 com valores extremos, testes antes do código com evidência em todas, e cerca de 23% menos chamadas de ferramenta. Consolidado em `evidencias/testes-pacote/rodadas/rodada-02/RESULTADOS.md`.
+- **[IA]** Trocou `gerado/` e as evidências da raiz de `evidencias/` pela execução P00 da rodada 02 (skills v2). Atualizou o README com a comparação entre rodadas.
+- **[IA]** Novas fricções da v2 listadas como candidatas a uma rodada 03, a principal sendo um exemplo contraditório na regra 409 ou 422 (E-10). Não aplicadas, pelo prazo.
+- **[D]** Entrega atualizada para a v2. Envio da branch e PR aguardando o participante. *(Pendente)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
@@ -199,3 +208,4 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 | E-07 | Modelo de projeto e skill `revisao` | A IA colocou as exceções de negócio num módulo que importa FastAPI e, na revisão, exigiu domínio sem FastAPI. As duas instruções se contradizem. | Apontado em todas as execuções. Correção proposta em M4. |
 | E-08 | Skill `construcao` | A IA exigiu TDD um teste por vez, caro demais e impossível de verificar no gate. Nenhum agente seguiu. | Correção proposta em M7: lote de testes com rodada de falhas registrada. |
 | E-09 | Pedido de teste P04 | A IA escreveu um pedido com regras de saldo que se contradizem. | O agente da execução percebeu e resolveu com premissa e teste. Motivou a lacuna nova de M12. |
+| E-10 | Regras transversais (v2) | A IA deu "prazo" e "data no passado" como exemplos de 422, contradizendo o teste de decisão que ela mesma escreveu quando o prazo depende de dado guardado. | Apontado por quatro agentes da rodada 02, que escolheram 409 de forma consistente. Correção listada para uma rodada 03. |

@@ -73,6 +73,7 @@ A tela fica em `http://localhost:8000/` e a documentação da API em `http://loc
 | Sistema gerado do pedido de treino | [`gerado/`](gerado/) |
 | Log da execução (agente, modelo, prompt, etapas, gates) | [`evidencias/log-execucao.md`](evidencias/log-execucao.md) |
 | Critérios de aceite verificados via HTTP | [`evidencias/criterios-aceite.md`](evidencias/criterios-aceite.md) |
+| Subida do sistema com relógio real (API, tela, docs) | [`evidencias/subida-manual.md`](evidencias/subida-manual.md) |
 | Revisão de qualidade e de segurança | [`evidencias/revisao.md`](evidencias/revisao.md), [`evidencias/seguranca.md`](evidencias/seguranca.md) |
 | Diário de decisões participante × IA | [`evidencias/diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
 | Teste de generalização em 6 pedidos (pedidos, rodadas, relatos dos agentes) | [`evidencias/testes-pacote/`](evidencias/testes-pacote/) |
@@ -89,8 +90,22 @@ Além do pedido de treino, escrevi 5 pedidos do mesmo tamanho e tipo, cada um fo
 | Rodada | Skills | Gates | Testes | CAs via HTTP | Ajuste manual |
 |---|---|---|---|---|---|
 | [01](evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md) | v1 | 36/36 | 390/390 | 60/60 | nenhum |
+| [02](evidencias/testes-pacote/rodadas/rodada-02/RESULTADOS.md) | v2 (atual) | 36/36 | 497/497 | 60/60 | nenhum |
 
 A rodada 01 passou em tudo. Mesmo assim, a matriz de recorrência dos relatos dos agentes mostrou 18 problemas nas skills, seis deles em todas as execuções. Eles viraram as melhorias M1 a M12 das skills v2.
+
+Efeito medido na rodada 02:
+
+| Indicador | Rodada 01 (v1) | Rodada 02 (v2) |
+|---|---|---|
+| Execuções com pendência | 6 de 6 | 0 de 6 |
+| Vulnerabilidades no `pip-audit` | 8 a 16 por execução | 0 |
+| Execuções que acharam HTTP 500 com valores extremos | 6 de 6 | 0 de 6 |
+| Testes escritos antes do código, com evidência | 0 de 6 | 6 de 6 |
+| Chamadas de ferramenta por execução (média) | ~66 | ~51 |
+| Tempo por execução (média) | ~25 min | ~23 min |
+
+Os relatos da rodada 02 ainda apontam fricções menores, todas listadas como candidatas a uma rodada 03 no consolidado.
 
 ## 5. Onde a IA errou e como corrigi
 
@@ -102,6 +117,7 @@ O registro completo está no [diário de decisões](evidencias/diario-de-decisoe
 - **Limite mal calibrado:** a IA fixou "60 linhas" para o PRD sem conferir com o próprio modelo de PRD. A calibração mostrou o conflito.
 - **Pedido de teste com contradição:** a IA escreveu o pedido P04 com regras de saldo contraditórias. O agente percebeu e resolveu com premissa e teste, o que motivou uma lacuna nova na concepção.
 - **Comportamento dos agentes:** horários do log inventados em vez de lidos do relógio, e arquivos temporários escritos fora da pasta de trabalho (apagados em seguida). Na v2, a skill `fabrica` manda ler o relógio com um comando e proíbe escrever fora da pasta.
+- **Exemplo contraditório na regra 409 ou 422 (v2):** a IA listou "prazo" e "data no passado" como 422, mas o teste de decisão que ela mesma escreveu leva a 409 quando o prazo é calculado sobre um dado guardado. Quatro agentes da rodada 02 apontaram e resolveram de forma consistente. Fica como primeira correção de uma rodada 03.
 - **Comunicação:** a IA apresentou a escolha de stack como "Python ou Node" sem deixar claro que as duas incluíam a tela. O participante questionou e a explicação foi refeita.
 
 O participante decidiu cada etapa e corrigiu o rumo quando a IA se perdeu em refino antes de ter uma execução completa (decisões D-10 e D-11 do diário).

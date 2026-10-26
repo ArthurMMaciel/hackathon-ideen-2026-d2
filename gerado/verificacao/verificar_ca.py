@@ -1,38 +1,26 @@
 """Verifica os critérios de aceite contra o servidor real. Rode a partir de gerado/: PY verificacao/verificar_ca.py"""
 
-from harness import RAIZ, Verificacao, servidor
+from harness import RAIZ, Verificacao, resumo, servidor
 
 AGORA = "2030-01-07T09:00:00-03:00"  # segunda-feira, 09:00
-DEPOIS = "2030-01-09T09:00:00-03:00"  # dois dias depois: reservas de 08/01 já passaram
+DEPOIS = "2030-01-07T12:00:00-03:00"  # mesmo dia, 12:00: a reserva das 10h-11h já passou
 D1 = "2030-01-08"
-SALA_PAULISTA, SALA_IBIRAPUERA, SALA_LARANJEIRA, SALA_MORADA = 1, 2, 3, 4
 
 
-def h(dia: str, hora: str) -> str:
+def h(hora: str, dia: str = D1) -> str:
     return f"{dia}T{hora}:00-03:00"
 
 
-def reserva(sala_id, inicio, fim, participantes=4, titulo="Reunião de verificação"):
+def reserva(sala_id: int, inicio: str, fim: str, participantes: int = 2) -> dict:
     return {
         "sala_id": sala_id,
         "responsavel_nome": "Pessoa Ficticia",
         "responsavel_email": "pessoa@exemplo.com",
-        "titulo": titulo,
+        "titulo": "Reunião de verificação",
         "participantes": participantes,
         "inicio": inicio,
         "fim": fim,
     }
-
-
-def resumo(r) -> str:
-    try:
-        corpo = r.json()
-    except ValueError:
-        corpo = r.text[:80]
-    if isinstance(corpo, dict):
-        chaves = ("id", "status", "erro", "mensagem")
-        corpo = {k: corpo[k] for k in chaves if k in corpo} or corpo
-    return f"HTTP {r.status_code} {corpo}"
 
 
 def main() -> int:
@@ -42,90 +30,93 @@ def main() -> int:
 
     with servidor(AGORA, banco) as api:
         r = api.get("/")
-        v.registrar("TELA", "Abrir a tela web", "HTTP 200 com HTML", f"HTTP {r.status_code}",
+        v.registrar("TELA", "Abrir a tela web", "HTTP 200 com HTML", resumo(r),
                     r.status_code == 200 and "<html" in r.text.lower() and "Reserva de salas" in r.text)
 
+        salas = {s["nome"]: s for s in api.get("/api/salas").json()}
+        paulista = salas["Paulista"]  # SAO_PAULO, capacidade 8
+        ibirapuera = salas["Ibirapuera"]  # SAO_PAULO, capacidade 4
+        laranjeira = salas["Laranjeira"]  # ARARAQUARA, capacidade 10
+
         # CA-01
-        r = api.post("/api/reservas", json=reserva(SALA_PAULISTA, h(D1, "10:00"), h(D1, "11:00")))
-        ca01 = r.json() if r.status_code == 201 else {}
-        v.registrar("CA-01", "Reservar sala livre dentro das regras (Paulista 08/01 10h–11h)",
-                    "201, status ATIVA", resumo(r), r.status_code == 201 and ca01.get("status") == "ATIVA")
+        r = api.post("/api/reservas", json=reserva(paulista["id"], h("10:00"), h("11:00"), 4))
+        v.registrar("CA-01", "Reservar Paulista 08/01 10h-11h, 4 pessoas", "HTTP 201, status=ATIVA",
+                    resumo(r, "id", "status"), r.status_code == 201 and r.json()["status"] == "ATIVA")
 
         # CA-02
-        r = api.post("/api/reservas", json=reserva(SALA_PAULISTA, h(D1, "10:30"), h(D1, "11:30")))
-        v.registrar("CA-02", "Reservar Paulista 10h30–11h30 sobre reserva 10h–11h",
-                    "409 CONFLITO_HORARIO com mensagem de conflito", resumo(r),
-                    r.status_code == 409 and r.json().get("erro") == "CONFLITO_HORARIO"
-                    and "conflito" in r.json().get("mensagem", "").lower())
+        r = api.post("/api/reservas", json=reserva(paulista["id"], h("10:30"), h("11:30")))
+        v.registrar("CA-02", "Reservar Paulista 10h30-11h30 (sobrepõe 10h-11h)",
+                    "HTTP 409, erro=CONFLITO_HORARIO, mensagem de conflito", resumo(r, "erro", "mensagem"),
+                    r.status_code == 409 and r.json()["erro"] == "CONFLITO_HORARIO"
+                    and "conflito" in r.json()["mensagem"].lower())
 
         # CA-03
-        r = api.post("/api/reservas", json=reserva(SALA_PAULISTA, h(D1, "11:00"), h(D1, "12:00")))
-        v.registrar("CA-03", "Reservar Paulista 11h–12h com reserva 10h–11h existente",
-                    "201, status ATIVA", resumo(r), r.status_code == 201 and r.json().get("status") == "ATIVA")
+        r = api.post("/api/reservas", json=reserva(paulista["id"], h("11:00"), h("12:00")))
+        v.registrar("CA-03", "Reservar Paulista 11h-12h com reserva 10h-11h", "HTTP 201, status=ATIVA",
+                    resumo(r, "id", "status"), r.status_code == 201 and r.json()["status"] == "ATIVA")
 
         # CA-04
-        curta = api.post("/api/reservas", json=reserva(SALA_IBIRAPUERA, h(D1, "10:00"), h(D1, "10:10")))
-        longa = api.post("/api/reservas", json=reserva(SALA_IBIRAPUERA, h(D1, "13:00"), h(D1, "17:01")))
-        v.registrar("CA-04", "Reserva com 10 minutos e com 4h01",
-                    "422 DURACAO_INVALIDA nas duas", f"10 min: {resumo(curta)}; 4h01: {resumo(longa)}",
-                    all(x.status_code == 422 and x.json().get("erro") == "DURACAO_INVALIDA" for x in (curta, longa)))
+        r1 = api.post("/api/reservas", json=reserva(laranjeira["id"], h("14:00"), h("14:10")))
+        r2 = api.post("/api/reservas", json=reserva(laranjeira["id"], h("14:00"), h("18:01")))
+        v.registrar("CA-04", "Reservas de 10 minutos e de 4h01",
+                    "HTTP 422, erro=DURACAO_INVALIDA nas duas",
+                    f"10 min: {resumo(r1, 'erro')}; 4h01: {resumo(r2, 'erro')}",
+                    all(x.status_code == 422 and x.json()["erro"] == "DURACAO_INVALIDA" for x in (r1, r2)))
 
         # CA-05
-        r = api.post("/api/reservas", json=reserva(SALA_IBIRAPUERA, h("2030-01-07", "08:00"), h("2030-01-07", "09:30")))
-        v.registrar("CA-05", "Reserva com início 07/01 08h, relógio em 07/01 09h",
-                    "422 INICIO_NO_PASSADO", resumo(r),
-                    r.status_code == 422 and r.json().get("erro") == "INICIO_NO_PASSADO")
+        r = api.post("/api/reservas", json=reserva(laranjeira["id"], h("08:00", "2030-01-07"),
+                                                   h("08:45", "2030-01-07")))
+        v.registrar("CA-05", "Reservar 07/01 08h-08h45 com relógio em 07/01 09h",
+                    "HTTP 422, erro=INICIO_NO_PASSADO", resumo(r, "erro"),
+                    r.status_code == 422 and r.json()["erro"] == "INICIO_NO_PASSADO")
 
         # CA-06
-        r = api.post("/api/reservas", json=reserva(SALA_IBIRAPUERA, h(D1, "14:00"), h(D1, "15:00"), participantes=5))
-        v.registrar("CA-06", "5 participantes na Ibirapuera (capacidade 4)",
-                    "422 CAPACIDADE_EXCEDIDA", resumo(r),
-                    r.status_code == 422 and r.json().get("erro") == "CAPACIDADE_EXCEDIDA")
+        r = api.post("/api/reservas", json=reserva(ibirapuera["id"], h("15:00"), h("16:00"), 5))
+        v.registrar("CA-06", "Reservar Ibirapuera (capacidade 4) com 5 participantes",
+                    "HTTP 422, erro=CAPACIDADE_EXCEDIDA", resumo(r, "erro"),
+                    r.status_code == 422 and r.json()["erro"] == "CAPACIDADE_EXCEDIDA")
 
         # CA-07
-        criada = api.post("/api/reservas", json=reserva(SALA_LARANJEIRA, h(D1, "14:00"), h(D1, "15:00"))).json()
-        cancelada = api.post(f"/api/reservas/{criada['id']}/cancelar")
-        nova = api.post("/api/reservas", json=reserva(SALA_LARANJEIRA, h(D1, "14:00"), h(D1, "15:00")))
-        historico = api.get(f"/api/reservas/{criada['id']}").json()
-        v.registrar("CA-07", "Cancelar reserva futura (Laranjeira 08/01 14h–15h) e reservar o mesmo horário",
-                    "200 CANCELADA; nova reserva 201; histórico mantém CANCELADA",
-                    f"cancelar: {resumo(cancelada)}; nova: {resumo(nova)}; histórico: {historico.get('status')}",
-                    cancelada.status_code == 200 and cancelada.json().get("status") == "CANCELADA"
-                    and nova.status_code == 201 and historico.get("status") == "CANCELADA")
+        alvo = api.post("/api/reservas", json=reserva(ibirapuera["id"], h("09:00"), h("10:00"))).json()
+        r = api.post(f"/api/reservas/{alvo['id']}/cancelar")
+        nova = api.post("/api/reservas", json=reserva(ibirapuera["id"], h("09:00"), h("10:00")))
+        v.registrar("CA-07", "Cancelar reserva futura de Ibirapuera 09h-10h e reservar o mesmo horário",
+                    "HTTP 200, status=CANCELADA; nova reserva HTTP 201",
+                    f"cancelar: {resumo(r, 'status')}; nova: {resumo(nova, 'status')}",
+                    r.status_code == 200 and r.json()["status"] == "CANCELADA" and nova.status_code == 201)
 
-        # CA-09 (Paulista ocupada 10h–12h)
-        params = {"inicio": h(D1, "10:00"), "fim": h(D1, "11:00"), "local": "SAO_PAULO"}
-        r4 = api.get("/api/salas/livres", params={**params, "capacidade_minima": 4})
-        r5 = api.get("/api/salas/livres", params={**params, "capacidade_minima": 5})
-        nomes4 = [s["nome"] for s in r4.json()] if r4.status_code == 200 else None
-        nomes5 = [s["nome"] for s in r5.json()] if r5.status_code == 200 else None
-        v.registrar("CA-09", "Salas livres 08/01 10h–11h, local SAO_PAULO, capacidade mínima 4 e 5 (Paulista ocupada)",
-                    "cap>=4: [Sala Ibirapuera]; cap>=5: []",
-                    f"HTTP {r4.status_code} cap>=4: {nomes4}; HTTP {r5.status_code} cap>=5: {nomes5}",
-                    nomes4 == ["Sala Ibirapuera"] and nomes5 == [])
+        # CA-08 (preparação): reserva hoje 10h-11h, que estará no passado às 12h.
+        passada = api.post("/api/reservas", json=reserva(laranjeira["id"], h("10:00", "2030-01-07"),
+                                                          h("11:00", "2030-01-07"))).json()
 
-        # CA-10
-        api.post("/api/reservas", json=reserva(SALA_MORADA, h(D1, "09:00"), h(D1, "10:00")))
-        cancelar = api.post("/api/reservas", json=reserva(SALA_MORADA, h(D1, "13:00"), h(D1, "15:00"))).json()
+        # CA-09: Paulista ocupada 10h-11h; filtro SAO_PAULO e capacidade mínima 4.
+        r = api.get("/api/salas/livres", params={"inicio": h("10:30"), "fim": h("11:30"),
+                                                 "local": "SAO_PAULO", "capacidade_minima": 4})
+        nomes = sorted(s["nome"] for s in r.json()) if r.status_code == 200 else []
+        v.registrar("CA-09", "Salas livres 08/01 10h30-11h30, local SAO_PAULO, capacidade >= 4",
+                    "HTTP 200, só Ibirapuera (Paulista ocupada; outros locais fora)",
+                    f"{resumo(r)}: {nomes}", r.status_code == 200 and nomes == ["Ibirapuera"])
+
+        # CA-10: Laranjeira 08/01 ativa 08h-10h e cancelada 10h-12h.
+        api.post("/api/reservas", json=reserva(laranjeira["id"], h("08:00"), h("10:00")))
+        cancelar = api.post("/api/reservas", json=reserva(laranjeira["id"], h("10:00"), h("12:00"))).json()
         api.post(f"/api/reservas/{cancelar['id']}/cancelar")
-        r = api.get("/api/relatorios/ocupacao", params={"data": D1})
-        morada = next((s for s in r.json().get("salas", []) if s["sala_id"] == SALA_MORADA), {}) if r.status_code == 200 else {}
-        v.registrar("CA-10", "Ocupação de 08/01 da Morada do Sol: 1h ativa (9h–10h) e 2h canceladas (13h–15h)",
-                    "60 min, taxa 10.0% (canceladas fora)",
-                    f"HTTP {r.status_code} minutos={morada.get('minutos_ocupados')} taxa={morada.get('taxa_ocupacao')}",
-                    morada.get("minutos_ocupados") == 60 and morada.get("taxa_ocupacao") == 10.0)
+        r = api.get("/api/relatorios/ocupacao", params={"dia": D1})
+        linha = next(x for x in r.json()["salas"] if x["sala_id"] == laranjeira["id"])
+        v.registrar("CA-10", "Ocupação de 08/01 com Laranjeira 08h-10h ativa e 10h-12h cancelada",
+                    "HTTP 200, Laranjeira 120 min, 20.0% (cancelada fora)",
+                    f"HTTP {r.status_code}, minutos_ocupados={linha['minutos_ocupados']}, "
+                    f"taxa_ocupacao={linha['taxa_ocupacao']}",
+                    r.status_code == 200 and linha["minutos_ocupados"] == 120.0 and linha["taxa_ocupacao"] == 20.0)
 
-    # CA-08: o tempo passa (servidor reiniciado com APP_AGORA posterior, mesmo banco).
+    # O tempo passa: mesmo banco, relógio em 07/01 12h.
     with servidor(DEPOIS, banco) as api:
-        r = api.post(f"/api/reservas/{ca01.get('id', 0)}/cancelar")
-        estado = api.get(f"/api/reservas/{ca01.get('id', 0)}").json().get("status")
-        v.registrar("CA-08", "Cancelar a reserva de 08/01 10h–11h com relógio em 09/01 09h",
-                    "422 CANCELAMENTO_NAO_PERMITIDO; reserva segue ATIVA",
-                    f"{resumo(r)}; status depois: {estado}",
-                    r.status_code == 422 and r.json().get("erro") == "CANCELAMENTO_NAO_PERMITIDO" and estado == "ATIVA")
+        r = api.post(f"/api/reservas/{passada['id']}/cancelar")
+        v.registrar("CA-08", "Cancelar às 12h a reserva de 07/01 10h-11h",
+                    "HTTP 409, erro=RESERVA_NAO_FUTURA", resumo(r, "erro"),
+                    r.status_code == 409 and r.json()["erro"] == "RESERVA_NAO_FUTURA")
 
-    v.linhas.sort(key=lambda linha: (linha[0] != "TELA", linha[0]))
-    passou = v.salvar(RAIZ.parent / "evidencias" / "criterios-aceite.md")
+    passou = v.salvar()
     return 0 if passou else 1
 
 

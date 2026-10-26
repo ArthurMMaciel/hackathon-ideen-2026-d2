@@ -1,16 +1,17 @@
 # SPEC · Reserva de salas
 
-Stack: a da `stack-padrao` (Python 3.11, FastAPI, SQLite `gerado/dados/app.db`, pytest). Fuso `America/Sao_Paulo` (PR-01). Datas e horas na API em ISO 8601 com offset; horário sem fuso é recusado com `422`. No banco, texto UTC no formato de `relogio.para_banco`.
+Stack padrão (Python 3.11, FastAPI, SQLite em `dados/app.db`, pytest). Datas e horas na API em ISO 8601 com offset; no banco, texto UTC no formato de `relogio.para_banco`. Fuso `America/Sao_Paulo` (PR-01). Respostas devolvem horários no fuso padrão (`-03:00`). Frações de segundo em `inicio`/`fim` (reserva e salas livres) são descartadas na entrada, antes das regras, para o valor validado ser o mesmo gravado (decisão da revisão).
 
 ## Modelo de dados
 
 ```sql
 CREATE TABLE IF NOT EXISTS salas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK (length(nome) BETWEEN 1 AND 200),
+  nome TEXT NOT NULL CHECK (length(nome) BETWEEN 1 AND 200),
   local TEXT NOT NULL CHECK (local IN ('SAO_PAULO', 'ARARAQUARA', 'COWORKING')),
-  capacidade INTEGER NOT NULL CHECK (capacidade BETWEEN 1 AND 500),
-  recursos TEXT NOT NULL DEFAULT '[]'
+  capacidade INTEGER NOT NULL CHECK (capacidade BETWEEN 1 AND 1000),
+  recursos TEXT NOT NULL DEFAULT '[]',
+  UNIQUE (nome COLLATE NOCASE, local)
 );
 
 CREATE TABLE IF NOT EXISTS reservas (
@@ -22,186 +23,195 @@ CREATE TABLE IF NOT EXISTS reservas (
   participantes INTEGER NOT NULL CHECK (participantes >= 1),
   inicio TEXT NOT NULL,
   fim TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'ATIVA' CHECK (status IN ('ATIVA', 'CANCELADA')),
+  status TEXT NOT NULL CHECK (status IN ('ATIVA', 'CANCELADA')),
   criada_em TEXT NOT NULL,
   cancelada_em TEXT,
   CHECK (fim > inicio)
 );
 
-CREATE INDEX IF NOT EXISTS idx_reservas_sala_inicio ON reservas (sala_id, inicio);
+CREATE INDEX IF NOT EXISTS ix_reservas_sala_inicio ON reservas (sala_id, inicio);
 ```
 
-`recursos` é uma lista JSON em texto (ex.: `["TV","QUADRO"]`): as consultas do PRD não filtram por recurso, então não há tabela de ligação.
+`recursos` guarda uma lista JSON de valores de `TV`, `VIDEOCONFERENCIA`, `QUADRO`, na ordem `TV, VIDEOCONFERENCIA, QUADRO` (lista curta, só lida junto da sala; não há consulta por recurso).
 
 ## Carga inicial
-Roda em `banco.carga_inicial` só quando `salas` está vazia (RF-03). Nomes fictícios.
+Só insere quando `salas` está vazia (RF-03). Sem datas. Nenhuma reserva inicial.
 
 | nome | local | capacidade | recursos |
 |---|---|---|---|
-| Sala Paulista | SAO_PAULO | 8 | TV, VIDEOCONFERENCIA |
-| Sala Ibirapuera | SAO_PAULO | 4 | QUADRO |
-| Sala Laranjeira | ARARAQUARA | 10 | TV, QUADRO |
-| Sala Morada do Sol | ARARAQUARA | 6 | VIDEOCONFERENCIA |
-| Coworking Aquario | COWORKING | 12 | TV, VIDEOCONFERENCIA, QUADRO |
-| Coworking Cabine | COWORKING | 2 | (nenhum) |
+| Paulista | SAO_PAULO | 8 | TV, VIDEOCONFERENCIA |
+| Ibirapuera | SAO_PAULO | 4 | QUADRO |
+| Laranjeira | ARARAQUARA | 10 | TV, QUADRO |
+| Morada do Sol | ARARAQUARA | 6 | VIDEOCONFERENCIA |
+| Coworking Azul | COWORKING | 12 | TV, VIDEOCONFERENCIA, QUADRO |
+| Coworking Verde | COWORKING | 3 | (nenhum) |
 
 ## Endpoints
 
-Erros de validação de formato: `422` padrão do FastAPI (`{"detail": [...]}`). Limites comuns: identificadores (`sala_id`, `reserva_id`) inteiros de 1 a 2^63-1; datas e data-horas com ano entre 2000 e 2100 (PR-10); fora disso, `422`. Erros de regra: `{"erro": "<CODIGO>", "mensagem": "<texto>"}`.
+Objeto `Sala`: `{"id": 1, "nome": "Paulista", "local": "SAO_PAULO", "capacidade": 8, "recursos": ["TV", "VIDEOCONFERENCIA"]}`.
 
-Representação de sala: `{"id": 1, "nome": "Sala Paulista", "local": "SAO_PAULO", "capacidade": 8, "recursos": ["TV", "VIDEOCONFERENCIA"]}`.
-
-Representação de reserva: `{"id": 1, "sala_id": 1, "responsavel_nome": "Ana Teste", "responsavel_email": "ana@exemplo.com", "titulo": "Planejamento", "participantes": 4, "inicio": "2030-01-08T10:00:00-03:00", "fim": "2030-01-08T11:00:00-03:00", "status": "ATIVA", "criada_em": "2030-01-07T09:00:00-03:00", "cancelada_em": null}`. Datas de saída sempre no fuso PR-01.
+Objeto `Reserva`: `{"id": 1, "sala_id": 1, "sala_nome": "Paulista", "responsavel_nome": "Ana Teste", "responsavel_email": "ana@exemplo.com", "titulo": "Planejamento", "participantes": 4, "inicio": "2030-01-08T10:00:00-03:00", "fim": "2030-01-08T11:00:00-03:00", "status": "ATIVA"}`.
 
 ### GET /api/salas · RF-02
 - **Entrada:** nenhuma.
-- **Sucesso:** 200 `[<sala>, ...]`, ordenado por local e nome (PR-06).
-- **Erros:** nenhum.
+- **Sucesso:** 200 lista de `Sala`, ordenada por local e nome (PR-10).
+- **Erros:** nenhum de negócio.
 
-### GET /api/salas/{sala_id} · RF-02
-- **Entrada:** `sala_id` inteiro no caminho.
-- **Sucesso:** 200 `<sala>`.
+### GET /api/salas/livres · RF-07
+- **Entrada (consulta):** `inicio: DataHora` obrigatório; `fim: DataHora` obrigatório; `local: SAO_PAULO|ARARAQUARA|COWORKING` opcional; `capacidade_minima: int 1..1000` opcional.
+- **Sucesso:** 200 lista de `Sala` livres (RN-07), ordenada por local e nome.
 - **Erros:**
   | Status | Código | Regra |
   |---|---|---|
-  | 404 | SALA_NAO_ENCONTRADA | RF-02 |
-  | 422 | (validação) | `sala_id` não inteiro |
+  | 422 | INTERVALO_INVALIDO | RN-07 (fim igual ou anterior ao início) |
+  | 422 | (validação) | formato, fuso ausente, enum ou faixa |
+
+Declarado antes de `/api/salas/{id}` para não colidir.
+
+### GET /api/salas/{id} · RF-02
+- **Entrada (caminho):** `id: Id`.
+- **Sucesso:** 200 `Sala`.
+- **Erros:**
+  | Status | Código | Regra |
+  |---|---|---|
+  | 404 | SALA_NAO_ENCONTRADA | — |
 
 ### POST /api/salas · RF-01
-- **Entrada (JSON):** `nome` texto 1..200 (obrigatório, espaços nas pontas removidos); `local` enum `SAO_PAULO|ARARAQUARA|COWORKING` (obrigatório); `capacidade` inteiro 1..500 (obrigatório); `recursos` lista de enum `TV|VIDEOCONFERENCIA|QUADRO`, sem repetição, opcional (padrão `[]`).
-- **Sucesso:** 201 `<sala>`.
+- **Entrada (corpo):** `nome: Texto`; `local: SAO_PAULO|ARARAQUARA|COWORKING`; `capacidade: int 1..1000`; `recursos: lista de TV|VIDEOCONFERENCIA|QUADRO`, opcional, padrão `[]`, até 3 itens.
+- **Sucesso:** 201 `Sala`.
 - **Erros:**
   | Status | Código | Regra |
   |---|---|---|
-  | 409 | SALA_NOME_DUPLICADO | RN-10 |
-  | 422 | (validação) | RN-10 (faixa, enum, repetição, vazio) |
-
-### GET /api/salas/livres · RF-06
-- **Entrada (consulta):** `inicio` e `fim` data-hora com offset (obrigatórios); `local` enum (opcional); `capacidade_minima` inteiro 1..500 (opcional).
-- **Sucesso:** 200 `[<sala>, ...]` só com salas sem reserva ATIVA sobreposta e que atendem aos filtros, ordem PR-06.
-- **Erros:**
-  | Status | Código | Regra |
-  |---|---|---|
-  | 422 | INTERVALO_INVALIDO | RN-09 |
-  | 422 | (validação) | sem fuso, enum ou faixa inválidos |
+  | 422 | RECURSOS_REPETIDOS | RN-09 |
+  | 409 | SALA_DUPLICADA | RN-10 |
+  | 422 | (validação) | RN-09 (capacidade fora de 1..1000, local ou recurso fora do enum) |
 
 ### POST /api/reservas · RF-04
-- **Entrada (JSON):** `sala_id` inteiro >= 1; `responsavel_nome` texto 1..200; `responsavel_email` texto 3..254 no formato `^[^@\s]+@[^@\s]+\.[^@\s]+$`; `titulo` texto 1..200; `participantes` inteiro 1..1000; `inicio` e `fim` data-hora com offset. Todos obrigatórios.
-- **Sucesso:** 201 `<reserva>` com `status` `ATIVA`.
-- **Erros (na ordem em que são conferidos):**
+- **Entrada (corpo):** `sala_id: Id`; `responsavel_nome: Texto`; `responsavel_email: Email`; `titulo: Texto`; `participantes: int 1..1000`; `inicio: DataHora`; `fim: DataHora`.
+- **Sucesso:** 201 `Reserva` com `status` `ATIVA`.
+- **Ordem das verificações:** sala existe → RN-02 → RN-03 → RN-04 → RN-01 (dentro de `banco.transacao`).
+- **Erros:**
   | Status | Código | Regra |
   |---|---|---|
-  | 422 | (validação) | RN-11, formato, sem fuso, participantes < 1 |
-  | 422 | INTERVALO_INVALIDO | RN-09 |
+  | 404 | SALA_NAO_ENCONTRADA | — |
   | 422 | DURACAO_INVALIDA | RN-02 |
   | 422 | INICIO_NO_PASSADO | RN-03 |
-  | 404 | SALA_NAO_ENCONTRADA | RF-04 |
   | 422 | CAPACIDADE_EXCEDIDA | RN-04 |
   | 409 | CONFLITO_HORARIO | RN-01 |
+  | 422 | (validação) | participantes < 1, e-mail inválido, horário sem fuso |
 
-### GET /api/reservas · RF-08
-- **Entrada (consulta):** `data` `AAAA-MM-DD` (obrigatório, dia civil PR-04); `sala_id` inteiro (opcional).
-- **Sucesso:** 200 `[<reserva>, ...]` com reservas ATIVAS e CANCELADAS que tocam o dia (`inicio < fim_do_dia` e `fim > inicio_do_dia`), ordenadas por início e id.
+### GET /api/reservas · RF-05
+- **Entrada (consulta):** `dia: Data` obrigatório; `sala_id: Id` opcional.
+- **Sucesso:** 200 lista de `Reserva` (ATIVAS e CANCELADAS) cujo intervalo toca o dia `[dia 00:00, dia+1 00:00)` no fuso padrão (PR-06), ordenada por início e sala (PR-10).
+- **Erros:** 422 (validação) para dia fora do formato; 404 SALA_NAO_ENCONTRADA se `sala_id` não existe.
+
+### POST /api/reservas/{id}/cancelar · RF-06
+- **Entrada (caminho):** `id: Id`. Sem corpo.
+- **Sucesso:** 200 `Reserva` com `status` `CANCELADA`.
 - **Erros:**
   | Status | Código | Regra |
   |---|---|---|
-  | 422 | (validação) | data ausente ou inválida |
+  | 404 | RESERVA_NAO_ENCONTRADA | — |
+  | 409 | RESERVA_JA_CANCELADA | RN-05, PR-04 |
+  | 409 | RESERVA_NAO_FUTURA | RN-05, PR-04 |
 
-### GET /api/reservas/{reserva_id} · RF-04, RF-09
-- **Entrada:** `reserva_id` inteiro.
-- **Sucesso:** 200 `<reserva>`.
-- **Erros:**
-  | Status | Código | Regra |
-  |---|---|---|
-  | 404 | RESERVA_NAO_ENCONTRADA | RF-05 |
+409 porque a mesma requisição seria aceita se a reserva guardada estivesse ATIVA e com início futuro (teste das regras transversais).
 
-### POST /api/reservas/{reserva_id}/cancelar · RF-05
-- **Entrada:** `reserva_id` inteiro; sem corpo.
-- **Sucesso:** 200 `<reserva>` com `status` `CANCELADA` e `cancelada_em` preenchido.
-- **Erros:**
-  | Status | Código | Regra |
-  |---|---|---|
-  | 404 | RESERVA_NAO_ENCONTRADA | RF-05 |
-  | 409 | RESERVA_JA_CANCELADA | RN-05 |
-  | 422 | CANCELAMENTO_NAO_PERMITIDO | RN-05 (início <= agora) |
-
-### GET /api/relatorios/ocupacao · RF-07
-- **Entrada (consulta):** `data` `AAAA-MM-DD` (obrigatório).
-- **Sucesso:** 200 `{"data": "2030-01-08", "janela_inicio": "08:00", "janela_fim": "18:00", "minutos_janela": 600, "salas": [{"sala_id": 1, "nome": "Sala Paulista", "local": "SAO_PAULO", "minutos_ocupados": 60, "taxa_ocupacao": 10.0}, ...]}`. Todas as salas aparecem, ordem PR-06. `taxa_ocupacao` em percentual, 1 casa decimal (PR-05).
-- **Erros:**
-  | Status | Código | Regra |
-  |---|---|---|
-  | 422 | (validação) | data ausente ou inválida |
+### GET /api/relatorios/ocupacao · RF-08
+- **Entrada (consulta):** `dia: Data` obrigatório.
+- **Sucesso:** 200 `{"dia": "2030-01-08", "janela_inicio": "08:00", "janela_fim": "18:00", "minutos_janela": 600, "salas": [{"sala_id": 1, "sala_nome": "Paulista", "local": "SAO_PAULO", "minutos_ocupados": 60.0, "taxa_ocupacao": 10.0}]}`. Todas as salas, ordem local e nome (PR-08, PR-10). `minutos_ocupados` e `taxa_ocupacao` (percentual) com 1 casa decimal, arredondamento meio para cima (PR-07).
+- **Erros:** 422 (validação) para dia fora do formato.
 
 ## Regras de negócio
 | Regra | Função em app/dominio | Erro |
 |---|---|---|
-| RN-01 | `reservas.verificar_conflito(existentes, inicio, fim)` (usa `reservas.sobrepoe`) | 409 CONFLITO_HORARIO |
+| RN-01 | `reservas.verificar_conflito(inicio, fim, existentes)` usando `intervalos.sobrepoe` | 409 CONFLITO_HORARIO |
 | RN-02 | `reservas.validar_duracao(inicio, fim)` | 422 DURACAO_INVALIDA |
-| RN-03 | `reservas.validar_inicio_futuro(inicio, agora)` | 422 INICIO_NO_PASSADO |
-| RN-04 | `reservas.validar_participantes(participantes, capacidade)` | 422 CAPACIDADE_EXCEDIDA (abaixo de 1: 422 validação) |
-| RN-05 | `reservas.validar_cancelamento(status, inicio, agora)` | 409 RESERVA_JA_CANCELADA; 422 CANCELAMENTO_NAO_PERMITIDO |
-| RN-06 | `reservas.bloqueia_horario(status)`, usada por RN-01, RN-07 e RN-08 | (sem erro) |
-| RN-07 | `salas.filtrar_livres(salas, ocupadas, local, capacidade_minima)` | (sem erro) |
-| RN-08 | `ocupacao.calcular(salas, reservas, dia)` | (sem erro) |
-| RN-09 | `reservas.validar_intervalo(inicio, fim)` | 422 INTERVALO_INVALIDO |
-| RN-10 | modelo Pydantic `SalaEntrada` + `salas.validar_nome_unico(ja_existe, nome)` | 422 validação; 409 SALA_NOME_DUPLICADO |
-| RN-11 | modelo Pydantic `ReservaEntrada` (padrão de e-mail, `min_length=1`) | 422 validação |
-
-`app/dominio/` não importa FastAPI nem `sqlite3`; recebe `agora` como parâmetro.
+| RN-03 | `reservas.validar_inicio(inicio, agora)` | 422 INICIO_NO_PASSADO |
+| RN-04 | `reservas.validar_participantes(participantes, capacidade)` | 422 CAPACIDADE_EXCEDIDA |
+| RN-05 | `reservas.validar_cancelamento(status, inicio, agora)` | 409 RESERVA_JA_CANCELADA, 409 RESERVA_NAO_FUTURA |
+| RN-06 | repositório filtra `status = 'ATIVA'` em conflito, livres e ocupação; cancelamento só faz `UPDATE status` | — |
+| RN-07 | `salas.validar_intervalo_consulta(inicio, fim)` e `salas.filtrar_livres(salas, ocupadas, local, capacidade_minima)` | 422 INTERVALO_INVALIDO |
+| RN-08 | `ocupacao.calcular(dia, salas, reservas)` | — |
+| RN-09 | Pydantic (faixas e enums) e `salas.normalizar_recursos(recursos)` | 422 RECURSOS_REPETIDOS |
+| RN-10 | `salas.verificar_nome_unico(nome, local, existentes)` | 409 SALA_DUPLICADA |
 
 ## Tela
-Página única em `/` (`app/estatico/index.html`):
-- **Agenda do dia:** campo de data (padrão hoje) e, para cada sala (`GET /api/salas`), a lista das reservas do dia (`GET /api/reservas?data=`) com horário, título, responsável, participantes e status; reservas ATIVAS têm botão "Cancelar" (`POST /api/reservas/{id}/cancelar`).
-- **Nova reserva:** formulário com sala (lista), responsável, e-mail, título, participantes, data, hora de início e hora de fim; envia `POST /api/reservas` com offset `-03:00` (PR-01) e recarrega a agenda.
-- **Salas livres:** data, hora de início e fim, local e capacidade mínima opcionais; chama `GET /api/salas/livres`.
-- **Ocupação do dia:** tabela de `GET /api/relatorios/ocupacao?data=` para a data da agenda.
-- Mensagens de erro da API (`mensagem` ou `detail`) aparecem numa área de aviso. Dados da API só com `textContent`.
+Uma página em `/`, título "Reserva de salas".
+- **Nova reserva:** formulário (sala em lista vinda de `GET /api/salas`, responsável, e-mail, título, participantes, início e fim em `datetime-local`). O script acrescenta `:00-03:00` (fuso padrão) antes de enviar a `POST /api/reservas`. Sucesso e erro por `mostrarMensagem`; recarrega a agenda.
+- **Agenda do dia por sala:** data e sala opcional; chama `GET /api/reservas?dia=&sala_id=`; tabela com sala, horário, título, responsável, participantes, status e botão "Cancelar" nas ATIVAS (`POST /api/reservas/{id}/cancelar`).
+- **Salas livres** (pedido: "um jeito rápido de achar sala livre"): início, fim, local e capacidade mínima; chama `GET /api/salas/livres`.
+- **Ocupação do dia** (pedido: "saber quanto cada sala é usada"): data; chama `GET /api/relatorios/ocupacao`.
+- Dados da API exibidos só por `textContent`/`desenharTabela`.
 
 ## Rastreabilidade
 | Requisito | Atendido por |
 |---|---|
 | RF-01 | `POST /api/salas` |
-| RF-02 | `GET /api/salas`, `GET /api/salas/{sala_id}` |
-| RF-03 | carga inicial em `banco.carga_inicial` |
-| RF-04 | `POST /api/reservas`, `GET /api/reservas/{reserva_id}` |
-| RF-05 | `POST /api/reservas/{reserva_id}/cancelar` |
-| RF-06 | `GET /api/salas/livres` |
-| RF-07 | `GET /api/relatorios/ocupacao` |
-| RF-08 | `GET /api/reservas?data=` |
-| RF-09 | todos os endpoints acima em `/api` |
+| RF-02 | `GET /api/salas`, `GET /api/salas/{id}`, lista de salas na tela |
+| RF-03 | `banco.carga_inicial` |
+| RF-04 | `POST /api/reservas`, formulário "Nova reserva" |
+| RF-05 | `GET /api/reservas?dia=&sala_id=`, seção "Agenda do dia por sala" |
+| RF-06 | `POST /api/reservas/{id}/cancelar`, botão "Cancelar" |
+| RF-07 | `GET /api/salas/livres`, seção "Salas livres" |
+| RF-08 | `GET /api/relatorios/ocupacao`, seção "Ocupação do dia" |
+| RF-09 | todos os endpoints `/api` acima |
 | RF-10 | tela em `/` |
-| RF-11 | SQLite local em `dados/app.db`; nenhum endpoint exige autenticação |
-| RN-01..RN-11 | tabela "Regras de negócio" |
+| RF-11 | SQLite em `dados/app.db`; nenhum endpoint de login |
 
 ## Plano de testes
-Relógio padrão dos testes: `2030-01-07 09:00 -03:00` (segunda). "D+1" = 2030-01-08. Sala 1 = Sala Paulista (cap. 8), sala 2 = Sala Ibirapuera (cap. 4).
+Relógio padrão `2030-01-07 09:00 -03:00` (segunda). "D+1" = 2030-01-08. Cada teste cria a sala que usa (`POST /api/salas`), salvo os de carga inicial.
 
 | Teste | Verifica | Relógio | Entrada | Esperado |
 |---|---|---|---|---|
-| test_ca_01_reserva_criada_ativa | CA-01, RF-04 | padrão | sala 1, D+1 10:00–11:00, 4 participantes | 201, `status` ATIVA, campos ecoados |
-| test_ca_02_recusa_conflito | CA-02, RN-01 | padrão | sala 1 D+1 10:00–11:00, depois 10:30–11:30 | 409, `erro` CONFLITO_HORARIO, mensagem cita conflito |
-| test_ca_03_encostar_permitido | CA-03, RN-01 | padrão | sala 1 D+1 10:00–11:00, depois 11:00–12:00 | 201, `status` ATIVA |
-| test_ca_04_recusa_duracao | CA-04, RN-02 | padrão | D+1 10:00–10:10 e 10:00–14:01 | 422, `erro` DURACAO_INVALIDA nos dois |
-| test_ca_05_recusa_inicio_passado | CA-05, RN-03 | padrão | 2030-01-07 08:00–09:30 | 422, `erro` INICIO_NO_PASSADO |
-| test_ca_06_recusa_participantes_acima_capacidade | CA-06, RN-04 | padrão | sala 2 (cap. 4), 5 participantes | 422, `erro` CAPACIDADE_EXCEDIDA |
-| test_ca_07_cancelar_reserva_futura | CA-07, RF-05, RN-06 | padrão | criar D+1 10:00–11:00, cancelar, criar de novo 10:00–11:00 | 200 `status` CANCELADA; nova reserva 201; GET da cancelada mantém CANCELADA |
-| test_ca_08_recusa_cancelar_reserva_passada | CA-08, RN-05 | padrão, depois `avancar(days=2)` | reserva D+1 10:00–11:00 | 422, `erro` CANCELAMENTO_NAO_PERMITIDO; status segue ATIVA |
-| test_ca_09_salas_livres_com_filtros | CA-09, RF-06, RN-07 | padrão | sala 1 ocupada D+1 10–11; livres SAO_PAULO cap>=4 10–11; cap>=5 10–11; cap>=5 11–12; sem filtro | só [Ibirapuera]; []; [Paulista]; 6 salas menos a ocupada |
-| test_ca_10_ocupacao_ignora_canceladas | CA-10, RF-07, RN-06, RN-08 | padrão | sala 1 D+1 10–11 ativa e 14–16 cancelada | sala 1: 60 min, 10.0; demais 0 |
-| test_rn_01_sobreposicao_bordas | RN-01 | padrão | base 10:00–11:00; 09:00–10:01, 10:59–12:00, 10:15–10:45, 09:00–12:00 | 409 em todos; 09:00–10:00 e 11:00–12:00 201; outra sala 10–11 201 |
-| test_rn_02_duracao_bordas | RN-02 | padrão | 14, 15, 16, 239, 240, 241 min | 422, 201, 201, 201, 201, 422 |
-| test_rn_03_inicio_bordas | RN-03 | padrão | início 08:59, 09:00, 09:01 do dia do relógio | 422 INICIO_NO_PASSADO, 201, 201 |
-| test_rn_04_participantes_bordas | RN-04 | padrão | sala 2 (cap. 4): 3, 4, 5, 0 | 201, 201, 422 CAPACIDADE_EXCEDIDA, 422 validação |
-| test_rn_05_cancelamento_bordas | RN-05 | padrão e avançado | início em 09:01 cancelado às 09:00; início 09:01 com relógio 09:01; em andamento; já cancelada | 200; 422; 422; 409 RESERVA_JA_CANCELADA |
-| test_rn_05_cancelar_inexistente | RF-05 | padrão | id 999 | 404 RESERVA_NAO_ENCONTRADA |
-| test_rn_08_ocupacao_janela_bordas | RN-08, PR-04, PR-05 | padrão | sala 1: 07:00–09:00, 17:30–19:00; sala 2: 18:00–19:00; sala 3: 08:00–08:20 | 90 min 15.0; 0 min 0.0; 20 min 3.3 |
-| test_rn_09_intervalo_invalido | RN-09 | padrão | fim = início; fim antes do início; idem em salas livres | 422 INTERVALO_INVALIDO |
-| test_rn_10_sala_cadastro_bordas | RN-10, RF-01 | padrão | capacidade 0, 1, 500, 501; nome repetido com outra caixa; recursos repetidos; local inválido; nome vazio | 422, 201, 201, 422; 409 SALA_NOME_DUPLICADO; 422; 422; 422 |
-| test_rn_11_validacao_reserva | RN-11 | padrão | e-mail sem @, título vazio, data sem fuso, sala inexistente | 422, 422, 422, 404 SALA_NAO_ENCONTRADA |
-| test_rf_02_consultar_sala | RF-02 | padrão | GET sala 1; GET sala 999 | 200 nome Sala Paulista; 404 SALA_NAO_ENCONTRADA |
-| test_rf_03_carga_inicial | RF-03 | padrão | GET /api/salas; reiniciar app no mesmo banco | 6 salas, 2 por local; continua 6 |
-| test_rf_08_agenda_do_dia | RF-08, RF-05 | padrão | reservas em D+1 (uma cancelada) e D+2; filtro por sala | só D+1, cancelada com status CANCELADA, ordenado por início |
-| test_robustez_parametros_fora_da_faixa | limites comuns, PR-10 | padrão | ids acima de 2^63-1, `sala_id` não numérico, datas no ano 1 e 9999 | 422 |
-| test_robustez_corpo_invalido | limites comuns, PR-10 | padrão | `sala_id` enorme ou texto, datas no ano 9999, participantes texto | 422 |
-| test_robustez_campo_faltando | RF-04 | padrão | corpo sem `titulo` | 422 com `loc` do campo |
+| test_ca_01_reserva_criada_ativa | CA-01 | padrão | sala cap 8, D+1 10:00–11:00, 4 participantes | 201, status ATIVA |
+| test_ca_02_recusa_conflito | CA-02 | padrão | 10:00–11:00 e depois 10:30–11:30 na mesma sala | 409 CONFLITO_HORARIO, mensagem cita conflito |
+| test_ca_03_reserva_encostada_criada | CA-03 | padrão | 10:00–11:00 e depois 11:00–12:00 | 201, status ATIVA |
+| test_ca_04_recusa_duracao_10_minutos | CA-04 | padrão | 10:00–10:10 | 422 DURACAO_INVALIDA |
+| test_ca_04_recusa_duracao_4h01 | CA-04 | padrão | 10:00–14:01 | 422 DURACAO_INVALIDA |
+| test_ca_05_recusa_inicio_no_passado | CA-05 | padrão | 2030-01-07 08:00–09:00 | 422 INICIO_NO_PASSADO |
+| test_ca_06_recusa_participantes_acima_da_capacidade | CA-06 | padrão | sala cap 4, 5 participantes | 422 CAPACIDADE_EXCEDIDA |
+| test_ca_07_cancelar_futura_libera_horario | CA-07 | padrão | cancela D+1 10–11; cria de novo 10–11 | 200 CANCELADA; 201 nova ATIVA; agenda mostra a CANCELADA |
+| test_ca_08_recusa_cancelar_reserva_passada | CA-08 | padrão, depois `avancar(hours=3)` | reserva 2030-01-07 10:00–11:00 | 409 RESERVA_NAO_FUTURA, status segue ATIVA |
+| test_ca_09_salas_livres_com_filtros | CA-09 | padrão | 3 salas: SP cap 10 ocupada, SP cap 10 livre, SP cap 4 livre, ARA cap 10 livre; filtro SAO_PAULO, cap≥6 | 200, só a SP cap 10 livre |
+| test_ca_10_ocupacao_ignora_canceladas | CA-10 | padrão | D+1: ativa 08–10, cancelada 10–12 | 200, minutos 120.0, taxa 20.0 |
+| test_rn_01_sobreposicao_contida_recusada | RN-01 | padrão | 10–12 e 10:30–11:00 | 409 CONFLITO_HORARIO |
+| test_rn_01_encostar_antes_permitido | RN-01 | padrão | 10–11 e 09:00–10:00 | 201 |
+| test_rn_01_outra_sala_sem_conflito | RN-01 | padrão | mesmo horário em outra sala | 201 |
+| test_rn_02_duracao_15_minutos_aceita | RN-02 | padrão | 10:00–10:15 | 201 |
+| test_rn_02_duracao_14_minutos_recusada | RN-02 | padrão | 10:00–10:14 | 422 DURACAO_INVALIDA |
+| test_rn_02_duracao_16_minutos_aceita | RN-02 | padrão | 10:00–10:16 | 201 |
+| test_rn_02_duracao_4h_aceita | RN-02 | padrão | 10:00–14:00 | 201 |
+| test_rn_02_duracao_3h59_aceita | RN-02 | padrão | 10:00–13:59 | 201 |
+| test_rn_02_fracao_de_segundo_descartada | RN-02 | padrão | 10:00:00.700–10:15:00.300 | 201, horários sem fração (15 min exatos) |
+| test_rn_02_fim_antes_do_inicio_recusado | RN-02 | padrão | 11:00–10:00 | 422 DURACAO_INVALIDA |
+| test_rn_03_inicio_igual_agora_aceito | RN-03 | padrão | 2030-01-07 09:00–10:00 | 201 |
+| test_rn_03_inicio_um_minuto_antes_recusado | RN-03 | padrão | 08:59–10:00 | 422 INICIO_NO_PASSADO |
+| test_rn_03_inicio_um_minuto_depois_aceito | RN-03 | padrão | 09:01–10:00 | 201 |
+| test_rn_04_participantes_igual_capacidade_aceito | RN-04 | padrão | cap 4, 4 | 201 |
+| test_rn_04_participantes_abaixo_capacidade_aceito | RN-04 | padrão | cap 4, 3 | 201 |
+| test_rn_04_participantes_zero_recusado | RN-04 | padrão | 0 | 422 |
+| test_rn_05_cancelar_um_minuto_antes_do_inicio | RN-05 | `avancar` até 09:59 de D | reserva D 10–11 | 200 CANCELADA |
+| test_rn_05_cancelar_no_inicio_recusado | RN-05 | `avancar` até 10:00 de D | reserva D 10–11 | 409 RESERVA_NAO_FUTURA |
+| test_rn_05_cancelar_em_andamento_recusado | RN-05 | `avancar` até 10:30 de D | reserva D 10–11 | 409 RESERVA_NAO_FUTURA |
+| test_rn_05_cancelar_duas_vezes_recusado | RN-05 | padrão | cancela duas vezes | 409 RESERVA_JA_CANCELADA |
+| test_rn_05_cancelar_inexistente | RN-05 | padrão | id 999 | 404 RESERVA_NAO_ENCONTRADA |
+| test_rn_07_intervalo_invalido | RN-07 | padrão | fim = início | 422 INTERVALO_INVALIDO |
+| test_rn_07_encostada_conta_como_livre | RN-07 | padrão | reserva 10–11, consulta 11–12 | sala na lista |
+| test_rn_07_cancelada_libera_sala | RN-07, RN-06 | padrão | reserva cancelada 10–11, consulta 10–11 | sala na lista |
+| test_rn_07_capacidade_minima_igual_aceita | RN-07 | padrão | cap 6, filtro 6 e 7 | aparece com 6, some com 7 |
+| test_rn_08_janela_corta_bordas | RN-08 | padrão | D+1 07:00–09:00 e 17:30–19:00 | minutos 90.0, taxa 15.0 |
+| test_rn_08_fora_da_janela_nao_conta | RN-08 | padrão | D+1 07:00–08:00 e 18:00–19:00 | minutos 0.0, taxa 0.0 |
+| test_rn_08_dia_inteiro_100 | RN-08 | padrão | D+1 08–12, 12–16, 16–18 | taxa 100.0 |
+| test_rn_08_arredondamento_uma_casa | RN-08 | padrão | D+1 10:00–10:20 | taxa 3.3 |
+| test_rn_08_lista_todas_as_salas | RN-08, PR-08 | padrão | dia sem reservas | 6 salas, taxa 0.0 |
+| test_rn_09_capacidade_bordas | RN-09 | padrão | 0, 1, 1000, 1001 | 422, 201, 201, 422 |
+| test_rn_09_enum_invalido | RN-09 | padrão | local `RIO`, recurso `PROJETOR` | 422 |
+| test_rn_09_recursos_repetidos | RN-09 | padrão | `["TV", "TV"]` | 422 RECURSOS_REPETIDOS |
+| test_rn_10_nome_duplicado_mesmo_local | RN-10 | padrão | "Sala X" e "sala x" em SAO_PAULO | 409 SALA_DUPLICADA |
+| test_rn_10_mesmo_nome_outro_local | RN-10 | padrão | "Sala X" em SAO_PAULO e ARARAQUARA | 201 |
+| test_rf_02_consultar_sala | RF-02 | padrão | id existente e 999 | 200; 404 SALA_NAO_ENCONTRADA |
+| test_rf_03_carga_inicial_seis_salas | RF-03 | padrão | banco novo | 6 salas, 2 por local |
+| test_rf_04_sala_inexistente | RF-04 | padrão | sala_id 999 | 404 SALA_NAO_ENCONTRADA |
+| test_rf_05_agenda_do_dia_por_sala | RF-05 | padrão | reservas em D+1 e D+2, duas salas | só D+1; filtro de sala |
+| test_rf_05_reserva_atravessando_meia_noite | RF-05, PR-05 | padrão | D+1 23:00 – D+2 01:00 | aparece em D+1 e D+2 |

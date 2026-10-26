@@ -7,21 +7,17 @@ from fastapi import APIRouter, Depends, Query
 
 from app.banco import obter_conexao
 from app.dominio import ocupacao
-from app.repositorio import reservas as repo_reservas
+from app.relogio import FUSO
+from app.repositorio import reservas as repo
 from app.repositorio import salas as repo_salas
-from app.rotas.modelos import Data, RelatorioOcupacao
+from app.rotas.modelos import Ocupacao
+from app.tipos import Data
 
 router = APIRouter(prefix="/api/relatorios", tags=["relatorios"])
 
 
-@router.get("/ocupacao", response_model=RelatorioOcupacao)
-def relatorio_ocupacao(data: Annotated[Data, Query()], conn: sqlite3.Connection = Depends(obter_conexao)):
-    abre, fecha = ocupacao.janela(data)
-    reservas = repo_reservas.no_intervalo(conn, abre, fecha)
-    return {
-        "data": data,
-        "janela_inicio": abre.strftime("%H:%M"),
-        "janela_fim": fecha.strftime("%H:%M"),
-        "minutos_janela": int((fecha - abre).total_seconds() // 60),
-        "salas": ocupacao.calcular(repo_salas.listar(conn), reservas, data),  # RN-08
-    }
+@router.get("/ocupacao", response_model=Ocupacao)
+def ocupacao_do_dia(dia: Annotated[Data, Query()], conn: sqlite3.Connection = Depends(obter_conexao)):
+    inicio, fim = ocupacao.janela(dia, FUSO)
+    ativas = repo.ativas_no_intervalo(conn, inicio, fim)  # RN-06: só ATIVAS
+    return ocupacao.calcular(dia, FUSO, repo_salas.listar(conn), ativas)  # RN-08

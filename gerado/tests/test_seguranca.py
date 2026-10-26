@@ -1,114 +1,129 @@
-"""Testes de ataque: injeção de SQL, XSS armazenado, limites de entrada e vazamento de erro."""
+"""Testes de ataque: injeção de SQL, XSS, validação de entrada e vazamento de erro."""
+
+import re
 
 import pytest
 
-from tests.test_criterios_aceite import D1, reserva
-from tests.conftest import iso
+from tests.apoio import amanha, criar_sala, dados_reserva
 
 INJECAO = "'; DROP TABLE reservas; --"
-XSS = "<script>alert(1)</script>"
+SCRIPT = "<script>alert(1)</script>"
+
+
+def _tabelas_intactas(cliente):
+    assert cliente.get("/api/salas").status_code == 200
+    assert cliente.get("/api/reservas", params={"dia": "2030-01-08"}).status_code == 200
+    assert cliente.get("/api/relatorios/ocupacao", params={"dia": "2030-01-08"}).status_code == 200
+
+
+def test_injecao_sql_em_campos_de_texto_da_sala(cliente):
+    r = cliente.post("/api/salas", json={"nome": INJECAO, "local": "SAO_PAULO", "capacidade": 4})
+    assert r.status_code == 201
+    assert r.json()["nome"] == INJECAO
+    _tabelas_intactas(cliente)
 
 
 @pytest.mark.parametrize("campo", ["responsavel_nome", "titulo"])
-def test_seguranca_injecao_sql_campos_de_reserva(cliente, campo):
-    r = cliente.post("/api/reservas", json=reserva(**{campo: INJECAO}))
+def test_injecao_sql_em_campos_de_texto_da_reserva(cliente, campo):
+    sala = criar_sala(cliente)
+    corpo = dados_reserva(sala["id"], amanha(10), amanha(11))
+    corpo[campo] = INJECAO
+    r = cliente.post("/api/reservas", json=corpo)
     assert r.status_code == 201
-    assert r.json()[campo] == INJECAO  # gravado literalmente
-    agenda = cliente.get("/api/reservas", params={"data": "2030-01-08"})
-    assert agenda.status_code == 200 and len(agenda.json()) == 1  # tabela intacta
-    assert len(cliente.get("/api/salas").json()) == 6
+    assert r.json()[campo] == INJECAO
+    _tabelas_intactas(cliente)
+    assert len(cliente.get("/api/reservas", params={"dia": "2030-01-08"}).json()) == 1
 
 
-def test_seguranca_injecao_sql_email(cliente):
-    r = cliente.post("/api/reservas", json=reserva(responsavel_email="x'--@exemplo.com"))
-    assert r.status_code == 201 and r.json()["responsavel_email"] == "x'--@exemplo.com"
-
-
-def test_seguranca_injecao_sql_nome_da_sala(cliente):
-    r = cliente.post("/api/salas", json={"nome": "'; DROP TABLE salas; --", "local": "COWORKING", "capacidade": 3})
-    assert r.status_code == 201 and r.json()["nome"] == "'; DROP TABLE salas; --"
-    assert len(cliente.get("/api/salas").json()) == 7
+def test_injecao_sql_no_email(cliente):
+    sala = criar_sala(cliente)
+    corpo = dados_reserva(sala["id"], amanha(10), amanha(11))
+    corpo["responsavel_email"] = "x'--@exemplo.com"
+    r = cliente.post("/api/reservas", json=corpo)
+    assert r.status_code == 201
+    assert r.json()["responsavel_email"] == "x'--@exemplo.com"
+    _tabelas_intactas(cliente)
 
 
 @pytest.mark.parametrize(
     "caminho,params",
     [
-        ("/api/salas/livres", {"inicio": iso(D1, 10), "fim": iso(D1, 11), "local": "SAO_PAULO' OR '1'='1"}),
-        ("/api/salas/livres", {"inicio": iso(D1, 10), "fim": iso(D1, 11), "capacidade_minima": "1 OR 1=1"}),
-        ("/api/reservas", {"data": "2030-01-08' OR '1'='1"}),
-        ("/api/reservas", {"data": "2030-01-08", "sala_id": "1 OR 1=1"}),
-        ("/api/relatorios/ocupacao", {"data": INJECAO}),
-        ("/api/salas/1 OR 1=1", None),
+        ("/api/salas/livres", {"inicio": INJECAO, "fim": INJECAO}),
+        ("/api/salas/livres", {"inicio": "2030-01-08T10:00:00-03:00", "fim": "2030-01-08T11:00:00-03:00",
+                               "local": INJECAO}),
+        ("/api/salas/livres", {"inicio": "2030-01-08T10:00:00-03:00", "fim": "2030-01-08T11:00:00-03:00",
+                               "capacidade_minima": INJECAO}),
+        ("/api/reservas", {"dia": INJECAO}),
+        ("/api/reservas", {"dia": "2030-01-08", "sala_id": INJECAO}),
+        ("/api/relatorios/ocupacao", {"dia": INJECAO}),
     ],
 )
-def test_seguranca_injecao_sql_parametros(cliente, caminho, params):
-    r = cliente.get(caminho, params=params)
-    assert r.status_code == 422
-    assert len(cliente.get("/api/salas").json()) == 6
+def test_injecao_sql_em_parametros_de_consulta(cliente, caminho, params):
+    assert cliente.get(caminho, params=params).status_code == 422
+    _tabelas_intactas(cliente)
 
 
-def test_seguranca_xss_texto_literal(cliente):
-    r = cliente.post("/api/reservas", json=reserva(titulo=XSS, responsavel_nome=XSS))
+def test_injecao_sql_no_caminho(cliente):
+    assert cliente.get("/api/salas/1 OR 1=1").status_code == 422
+    assert cliente.post("/api/reservas/1;DROP/cancelar").status_code in (404, 422)
+    _tabelas_intactas(cliente)
+
+
+def test_xss_texto_devolvido_literal(cliente):
+    sala = criar_sala(cliente, nome=SCRIPT)
+    assert sala["nome"] == SCRIPT
+    corpo = dados_reserva(sala["id"], amanha(10), amanha(11))
+    corpo["titulo"] = SCRIPT
+    r = cliente.post("/api/reservas", json=corpo)
     assert r.status_code == 201
-    corpo = cliente.get(f"/api/reservas/{r.json()['id']}").json()
-    assert corpo["titulo"] == XSS and corpo["responsavel_nome"] == XSS
+    agenda = cliente.get("/api/reservas", params={"dia": "2030-01-08"}).json()
+    assert agenda[0]["titulo"] == SCRIPT
+    assert agenda[0]["sala_nome"] == SCRIPT
 
 
-def test_seguranca_tela_nao_usa_innerhtml(cliente):
+def test_tela_nao_usa_innerhtml_com_dados(cliente):
     html = cliente.get("/").text
-    assert "innerHTML" not in html.replace("nunca innerHTML", "")
+    # O único "innerHTML" permitido é o comentário do modelo; nenhuma atribuição ou inserção de HTML.
+    assert not re.search(r"\.(innerHTML|outerHTML)\s*[+]?=|insertAdjacentHTML|document\.write", html)
     assert "textContent" in html
 
 
-@pytest.mark.parametrize(
-    "alteracao",
-    [
-        {"titulo": "x" * 201},
-        {"responsavel_nome": "x" * 201},
-        {"responsavel_email": "a" * 250 + "@ex.com"},
-        {"participantes": -1},
-        {"sala_id": -1},
-    ],
-)
-def test_seguranca_limites_reserva(cliente, alteracao):
-    assert cliente.post("/api/reservas", json=reserva(**alteracao)).status_code == 422
-
-
-@pytest.mark.parametrize(
-    "corpo",
-    [
-        {"nome": "x" * 201, "local": "COWORKING", "capacidade": 3},
-        {"nome": "Sala X", "local": "COWORKING", "capacidade": -5},
-        {"nome": "Sala X", "local": "COWORKING", "capacidade": 3, "recursos": ["TV"] * 50},
-    ],
-)
-def test_seguranca_limites_sala(cliente, corpo):
-    assert cliente.post("/api/salas", json=corpo).status_code == 422
-
-
-def test_seguranca_limite_capacidade_minima_negativa(cliente):
-    r = cliente.get("/api/salas/livres", params={"inicio": iso(D1, 10), "fim": iso(D1, 11), "capacidade_minima": -1})
+def test_texto_acima_do_limite_recusado(cliente):
+    sala = criar_sala(cliente)
+    corpo = dados_reserva(sala["id"], amanha(10), amanha(11))
+    corpo["titulo"] = "x" * 201
+    assert cliente.post("/api/reservas", json=corpo).status_code == 422
+    r = cliente.post("/api/salas", json={"nome": "x" * 201, "local": "SAO_PAULO", "capacidade": 4})
     assert r.status_code == 422
 
 
-@pytest.mark.parametrize("caminho", ["/api/reservas", "/api/salas"])
-def test_seguranca_json_malformado_sem_vazamento(cliente, caminho):
-    r = cliente.post(caminho, content=b'{"titulo": "abc",', headers={"Content-Type": "application/json"})
+def test_numero_negativo_recusado(cliente):
+    sala = criar_sala(cliente)
+    assert cliente.post("/api/reservas", json=dados_reserva(sala["id"], amanha(10), amanha(11), -3)).status_code == 422
+    r = cliente.post("/api/salas", json={"nome": "Neg", "local": "SAO_PAULO", "capacidade": -1})
+    assert r.status_code == 422
+
+
+def test_json_malformado_sem_vazamento(cliente):
+    r = cliente.post("/api/reservas", content=b'{"sala_id": 1, "titulo": ', headers={"Content-Type": "application/json"})
     assert 400 <= r.status_code < 500
-    texto = r.text.lower()
-    for proibido in ("traceback", "sqlite", "select ", "insert ", 'file "'):
-        assert proibido not in texto
+    corpo = r.text
+    for proibido in ("Traceback", "sqlite3", "SELECT", "INSERT", 'File "'):
+        assert proibido not in corpo
 
 
-def test_seguranca_sem_debug_e_sem_cors(cliente):
-    assert cliente.app.debug is False
+def test_erro_de_negocio_sem_vazamento(cliente):
+    r = cliente.post("/api/reservas/999/cancelar")
+    assert r.status_code == 404
+    assert set(r.json()) == {"erro", "mensagem"}
+
+
+def test_sem_cors_liberado(cliente):
     r = cliente.get("/api/salas", headers={"Origin": "http://atacante.exemplo"})
     assert "access-control-allow-origin" not in {k.lower() for k in r.headers}
 
 
-def test_seguranca_tela_ignora_cabecalho_range(cliente):
-    # CVE-2025-62727: a tela não passa pelo parser de Range do FileResponse.
-    faixas = "bytes=" + ",".join(f"{i}-{i}" for i in range(0, 4000, 2))
-    r = cliente.get("/", headers={"Range": faixas})
-    assert r.status_code == 200
-    assert "accept-ranges" not in {k.lower() for k in r.headers}
+def test_app_sem_debug():
+    from app.main import app
+
+    assert app.debug is False
