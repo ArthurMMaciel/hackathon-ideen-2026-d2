@@ -217,6 +217,19 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** README com três blocos de comandos (`python3` no Linux e no macOS, mais as dicas de instalação). As skills `fabrica`, `stack-padrao` e `construcao` passaram a prever `python3` e a exigir os três blocos no `gerado/README.md` dos próximos sistemas. O `gerado/README.md` atual não foi editado, para manter "nenhum ajuste manual" no sistema gerado; o README da raiz cobre os três sistemas.
 - **[D]** README final aguardando leitura do participante. *(Pendente)*
 
+## D-21 · PR, instalação em `.claude/skills/` e segundo agente
+
+- **[P]** Pediu para testar a instalação das skills em `.claude/skills/` e o pacote em outro agente (Codex). Autorizou enviar a branch, abrir o PR e disparar os dois testes, nessa ordem.
+- **[IA]** Enviou a branch `rodada-02` e abriu o PR #1 para a `main` às 08:19. O PR está bloqueado por exigir revisão (`REVIEW_REQUIRED`).
+- **[IA]** Teste B (Codex CLI 0.164, `codex exec` com sandbox de escrita e rede liberada, skills em `skills/` dentro da pasta) iniciado às 08:20.
+- **[IA]** Teste A (`claude -p` com `--dangerously-skip-permissions` numa pasta com `.claude/skills/`) foi bloqueado pelo classificador de segurança do próprio Claude Code, por iniciar um agente sem supervisão. A IA não contornou o bloqueio e passou o comando ao participante.
+- **[P]** Decidiu fazer o merge do PR #1 pelo GitHub.
+
+## D-22 · README em primeira pessoa e tabela das 8 skills
+
+- **[P]** Apontou que o diagrama mostrava 6 etapas e não deixava claro quais eram as 8 skills. Também pediu o README em primeira pessoa ("eu decidi", não "o participante decidiu"), porque o README é dele.
+- **[IA]** Trocou o diagrama, que também transbordava a largura no GitHub, por uma tabela com as 8 skills, o fluxo de cada uma e a saída. Passou para primeira pessoa os trechos que falavam do participante em terceira pessoa. As mudanças foram para a branch `entrega-ajustes` e o PR #2.
+
 ---
 
 ## Onde a IA errou ou foi imprecisa
