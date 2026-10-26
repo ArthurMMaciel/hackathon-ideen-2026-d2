@@ -6,118 +6,116 @@ Cada pessoa conduz o agente de IA do seu jeito, e não existe um processo reapro
 
 ## 2. O que eu fiz
 
-Um pacote de 7 skills (`SKILL.md`) que conduz qualquer agente, sem intervenção humana, por quatro etapas obrigatórias mais duas de garantia, com um gate verificável entre elas:
+Um pacote de 8 skills (`SKILL.md`) com dois fluxos.
+
+**Construção do zero:** de um pedido completo até o sistema verificado, sem intervenção humana, com um gate verificável entre as etapas.
 
 ```
-PEDIDO.md
-   │
-   ▼
-fabrica ── orquestra, mantém o log e confere cada gate
-   │
-   ├─ 1 concepcao          → gerado/docs/PRD.md   (RF, RN, premissas PR, fora de escopo, CA)
-   ├─ 2 especificacao      → gerado/docs/SPEC.md  (DDL, contrato de cada endpoint, plano de testes)
-   ├─ 3 construcao         → código + testes      (parte de um modelo de projeto testado)
-   ├─ 4 revisao            → evidencias/revisao.md
-   ├─ 5 revisao-seguranca  → evidencias/seguranca.md
-   └─ 6 verificacao        → evidencias/criterios-aceite.md (cada CA executado via HTTP no servidor real)
+PEDIDO.md → fabrica (orquestra, log, gates)
+  1 concepcao          → gerado/docs/PRD.md   (RF, RN, premissas, fora de escopo, CA)
+  2 especificacao      → gerado/docs/SPEC.md  (DDL, contrato dos endpoints, plano de testes)
+  3 construcao         → código + testes      (testes primeiro, sobre um modelo de projeto testado)
+  4 revisao            → evidencias/revisao.md
+  5 revisao-seguranca  → evidencias/seguranca.md
+  6 verificacao        → evidencias/criterios-aceite.md (cada CA executado via HTTP no servidor real)
 ```
 
-O que diferencia o pacote de um gerador de aplicação genérico:
+**Evolução:** quando o sistema já existe e o usuário pede uma mudança ("agora quero editar..."), a `fabrica` desvia para a skill `evolucao`. Ela atualiza PRD e SPEC só no que muda, escreve os testes da mudança antes do código, roda a suíte inteira contra regressão e verifica via HTTP, em cerca de 5 minutos.
 
-- **Rastreabilidade de ponta a ponta.** Todo trecho do pedido vira um código (`RF`, `RN`, `PR`), e todo `CA-xx` chega até um teste com o código no nome e a uma linha da evidência HTTP.
-- **Gates objetivos.** Uma etapa só começa quando o checklist da anterior está marcado no log. Os agentes voltaram a etapas anteriores quando um teste ou uma revisão mostrou erro na SPEC.
-- **Sem perguntas.** Lacunas do pedido viram premissas registradas, com uma lista fixa de lacunas comuns que o agente precisa conferir.
-- **Modelo de projeto testado** (`skills/construcao/modelo-projeto/`) com a infraestrutura que todo pedido desse tipo precisa:
-  - relógio injetável e `APP_AGORA`, para testar regras de "passado" e "futuro";
-  - SQLite com transação que evita corrida;
-  - tipos de entrada com limites, que evitam HTTP 500;
-  - erros padronizados;
-  - tela com CSS e funções prontas;
-  - scripts que sobem o servidor real para verificar os critérios.
-- **Evidências escritas pelas próprias skills.** Cada execução deixa log com horários, revisões, varredura de segurança e o resultado de cada critério via HTTP.
+Diferenciais:
 
-Stack padrão do sistema gerado: Python 3.11+, FastAPI, SQLite (biblioteca padrão), pytest e uma página HTML sem build.
+- **Rastreabilidade:** todo trecho do pedido vira um código, e todo `CA-xx` chega a um teste com o código no nome e a uma linha da evidência HTTP.
+- **Sem perguntas:** lacunas viram premissas registradas, a partir de uma lista fixa de lacunas comuns.
+- **Modelo de projeto testado** (`skills/construcao/modelo-projeto/`): relógio injetável, tipos com limites que evitam HTTP 500, erros padronizados, tela com CSS pronto, scripts que sobem o servidor real. Stack: Python 3.11+, FastAPI, SQLite, pytest, HTML sem build, com dependências fixadas e `pip-audit` sem vulnerabilidades.
+- **Evidência escrita pelas próprias skills:** log com horários lidos do relógio, revisões, varredura de segurança e critérios via HTTP.
 
 ## 3. Como reproduzir
 
 ### Rodar o pacote num pedido
 
-1. Crie uma pasta vazia com `PEDIDO.md` (por exemplo, uma cópia de `PEDIDO-TREINO.md`) e as pastas vazias `gerado/` e `evidencias/`.
-2. Instale as skills. Todas precisam ficar lado a lado, porque elas se referenciam por caminho relativo:
-   - Claude Code: copie o conteúdo de `skills/` para `.claude/skills/` dentro da pasta, ou para `~/.claude/skills/`.
-   - Outros agentes que leem `SKILL.md`: copie `skills/` para a pasta de skills do agente.
+1. Crie uma pasta com `PEDIDO.md` (por exemplo, uma cópia de `PEDIDO-TREINO.md`) e as pastas vazias `gerado/` e `evidencias/`.
+2. Disponibilize as skills mantendo as pastas lado a lado, porque elas se referenciam por caminho relativo (`../concepcao/SKILL.md`):
+   - **Forma testada:** copie `skills/` para dentro da pasta do pedido.
+   - **Forma não testada:** instalar como skills do agente (no Claude Code, copiar o conteúdo de `skills/` para `.claude/skills/`). Deve funcionar pelas referências relativas, mas não foi verificada.
 3. Abra o agente na pasta e use o prompt da banca:
 
    > Usando as skills disponíveis, construa o sistema descrito em PEDIDO.md dentro da pasta gerado/. Siga todas as etapas das skills até o sistema rodar e os critérios de aceite serem verificados.
 
-4. Requisitos: Python 3.11 ou superior e acesso à internet para o `pip`. Uma execução leva cerca de 25 minutos.
+4. Para uma mudança depois, peça em linguagem natural, por exemplo: "Usando as skills disponíveis, aplique esta mudança ao sistema em gerado/: ...".
 
-### Rodar o sistema gerado a partir do pedido de treino
+Requisitos: Python 3.11+ e internet para o `pip`. Construção do zero: cerca de 23 minutos. Evolução: cerca de 5 minutos.
 
-A partir de `gerado/` (no Linux e no macOS, troque `.venv\Scripts\python` por `.venv/bin/python`):
+### Rodar o sistema gerado do pedido de treino
+
+Em `gerado/`:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pytest -q
-.venv\Scripts\python verificacao/verificar_ca.py
-.venv\Scripts\python -m uvicorn app.main:app --port 8000
 ```
 
-A tela fica em `http://localhost:8000/` e a documentação da API em `http://localhost:8000/docs`.
+Depois, com `PY` sendo `.venv\Scripts\python` no Windows ou `.venv/bin/python` no Linux e no macOS:
+
+| Ação | Comando |
+|---|---|
+| Instalar | `PY -m pip install -r requirements.txt` |
+| Testar | `PY -m pytest -q` |
+| Verificar critérios via HTTP | `PY verificacao/verificar_ca.py` (reescreve `evidencias/criterios-aceite.md`) |
+| Rodar | `PY -m uvicorn app.main:app --port 8000` e abrir `http://localhost:8000/` |
 
 ## 4. Evidências
 
+Tudo o que não é o pacote (`skills/`) nem o sistema gerado (`gerado/`) está em `evidencias/`.
+
 | O quê | Onde |
 |---|---|
-| Sistema gerado do pedido de treino | [`gerado/`](gerado/) |
-| Log da execução (agente, modelo, prompt, etapas, gates) | [`evidencias/log-execucao.md`](evidencias/log-execucao.md) |
-| Critérios de aceite verificados via HTTP | [`evidencias/criterios-aceite.md`](evidencias/criterios-aceite.md) |
-| Subida do sistema com relógio real (API, tela, docs) | [`evidencias/subida-manual.md`](evidencias/subida-manual.md) |
-| Revisão de qualidade e de segurança | [`evidencias/revisao.md`](evidencias/revisao.md), [`evidencias/seguranca.md`](evidencias/seguranca.md) |
-| Diário de decisões participante × IA | [`evidencias/diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
-| Teste de generalização em 6 pedidos (pedidos, rodadas, relatos dos agentes) | [`evidencias/testes-pacote/`](evidencias/testes-pacote/) |
-| Calibração isolada da etapa de concepção | [`evidencias/calibracao/`](evidencias/calibracao/) |
+| Log da execução do pedido de treino (agente, modelo, prompt, gates) | [`log-execucao.md`](evidencias/log-execucao.md) |
+| Critérios de aceite via HTTP: 10/10, mais a tela | [`criterios-aceite.md`](evidencias/criterios-aceite.md) |
+| Subida com relógio real (API, tela, docs) | [`subida-manual.md`](evidencias/subida-manual.md) |
+| Revisões de qualidade e de segurança | [`revisao.md`](evidencias/revisao.md), [`seguranca.md`](evidencias/seguranca.md) |
+| Diário de decisões participante × IA | [`diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
+| Generalização em 6 pedidos, 2 rodadas | [`testes-pacote/`](evidencias/testes-pacote/) |
+| Teste da evolução (5 min 7 s) | [`testes-pacote/evolucao/`](evidencias/testes-pacote/evolucao/) |
 
-Tudo o que não é o pacote (`skills/`) nem o sistema gerado (`gerado/`) fica em `evidencias/`.
+**Agente e modelo:** Claude Code com `claude-opus-5-5`, em subagentes com contexto limpo, numa pasta só com as skills e o pedido. **O prompt da banca foi enviado acompanhado de notas de ambiente:**
+- trabalhar só naquela pasta;
+- usar o Python do Windows;
+- não usar o navegador compartilhado entre execuções paralelas;
+- relatar no fim onde as skills foram ambíguas.
 
-Agente e modelo: Claude Code com `claude-opus-5-5`, em subagentes com contexto limpo, num diretório só com as skills e o pedido, sem intervenção humana.
+Nenhuma nota orientou o conteúdo do sistema.
 
-### Generalização: o mesmo pacote em 6 pedidos
+**Generalização:** além do pedido de treino, escrevi 5 pedidos do mesmo tamanho e tipo, cada um forçando regras diferentes, para simular o pedido oculto.
 
-Além do pedido de treino, escrevi 5 pedidos do mesmo tamanho e tipo, cada um forçando um tipo diferente de regra, para simular o pedido oculto.
+| Rodada | Skills | Gates | Testes | CAs via HTTP | Ajuste manual | Pendências |
+|---|---|---|---|---|---|---|
+| [01](evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md) | v1 | 36/36 | 390/390 | 60/60 | nenhum | 6 de 6 (CVEs da stack) |
+| [02](evidencias/testes-pacote/rodadas/rodada-02/RESULTADOS.md) | v2 | 36/36 | 497/497 | 60/60 | nenhum | 0 de 6 |
 
-| Rodada | Skills | Gates | Testes | CAs via HTTP | Ajuste manual |
-|---|---|---|---|---|---|
-| [01](evidencias/testes-pacote/rodadas/rodada-01/RESULTADOS.md) | v1 | 36/36 | 390/390 | 60/60 | nenhum |
-| [02](evidencias/testes-pacote/rodadas/rodada-02/RESULTADOS.md) | v2 (atual) | 36/36 | 497/497 | 60/60 | nenhum |
+A rodada 01 passou em tudo, mas os relatos dos agentes mostraram 18 problemas nas skills. Eles viraram as melhorias da v2. Na rodada 02:
+- o `pip-audit` não encontrou vulnerabilidades;
+- nenhum HTTP 500 com valores extremos;
+- testes antes do código em todas as execuções;
+- cerca de 23% menos chamadas de ferramenta.
 
-A rodada 01 passou em tudo. Mesmo assim, a matriz de recorrência dos relatos dos agentes mostrou 18 problemas nas skills, seis deles em todas as execuções. Eles viraram as melhorias M1 a M12 das skills v2.
-
-Efeito medido na rodada 02:
-
-| Indicador | Rodada 01 (v1) | Rodada 02 (v2) |
-|---|---|---|
-| Execuções com pendência | 6 de 6 | 0 de 6 |
-| Vulnerabilidades no `pip-audit` | 8 a 16 por execução | 0 |
-| Execuções que acharam HTTP 500 com valores extremos | 6 de 6 | 0 de 6 |
-| Testes escritos antes do código, com evidência | 0 de 6 | 6 de 6 |
-| Chamadas de ferramenta por execução (média) | ~66 | ~51 |
-| Tempo por execução (média) | ~25 min | ~23 min |
-
-Os relatos da rodada 02 ainda apontam fricções menores, todas listadas como candidatas a uma rodada 03 no consolidado.
+**Bônus do desafio:**
+- Resultado de testes e scans: feito.
+- Skill dedicada à segurança: feito.
+- Pacote rodado em dois agentes diferentes: **não feito**. Só Claude Code foi testado.
 
 ## 5. Onde a IA errou e como corrigi
 
-O registro completo está no [diário de decisões](evidencias/diario-de-decisoes.md), na tabela "Onde a IA errou". Os principais:
+Registro completo no [diário de decisões](evidencias/diario-de-decisoes.md), tabela "Onde a IA errou".
 
-- **O modelo de projeto que a IA escreveu tinha uma vulnerabilidade conhecida** (CVE-2025-62727, `FileResponse` na versão fixada do starlette) **e permitia HTTP 500 com valores extremos** (id gigante, ano 9999). As seis execuções da rodada 01 acharam e contornaram os dois problemas sozinhas nas etapas de revisão. A correção definitiva veio na v2: stack atualizada e verificada com `pip-audit` limpo, e tipos com limites.
-- **Instruções contraditórias:** a revisão exigia domínio sem FastAPI, enquanto o modelo obrigava o domínio a importar um módulo com FastAPI. Também havia dois gates diferentes para a mesma etapa. Os dois casos foram detectados pelos próprios agentes de teste e corrigidos.
-- **Instrução impossível de seguir:** a IA exigiu TDD um teste por vez. Nenhum dos seis agentes seguiu. Na v2 a regra virou "testes em lote, com a rodada de falhas registrada no log".
-- **Limite mal calibrado:** a IA fixou "60 linhas" para o PRD sem conferir com o próprio modelo de PRD. A calibração mostrou o conflito.
-- **Pedido de teste com contradição:** a IA escreveu o pedido P04 com regras de saldo contraditórias. O agente percebeu e resolveu com premissa e teste, o que motivou uma lacuna nova na concepção.
-- **Comportamento dos agentes:** horários do log inventados em vez de lidos do relógio, e arquivos temporários escritos fora da pasta de trabalho (apagados em seguida). Na v2, a skill `fabrica` manda ler o relógio com um comando e proíbe escrever fora da pasta.
-- **Exemplo contraditório na regra 409 ou 422 (v2):** a IA listou "prazo" e "data no passado" como 422, mas o teste de decisão que ela mesma escreveu leva a 409 quando o prazo é calculado sobre um dado guardado. Quatro agentes da rodada 02 apontaram e resolveram de forma consistente. Fica como primeira correção de uma rodada 03.
-- **Comunicação:** a IA apresentou a escolha de stack como "Python ou Node" sem deixar claro que as duas incluíam a tela. O participante questionou e a explicação foi refeita.
+- **O modelo de projeto que a IA escreveu tinha uma vulnerabilidade conhecida** (CVE-2025-62727 no `FileResponse` da versão fixada do starlette) **e permitia HTTP 500 com valores extremos.** As seis execuções da rodada 01 acharam e contornaram os dois problemas nas revisões. A v2 corrigiu na origem: stack atualizada com `pip-audit` limpo, e tipos com limites.
+- **Instruções contraditórias ou impossíveis:**
+  - a revisão exigia domínio sem FastAPI, mas o modelo forçava o import;
+  - havia dois gates para a mesma etapa;
+  - o limite de 60 linhas para o PRD não cabia no próprio modelo;
+  - o "TDD um teste por vez" foi ignorado pelos seis agentes.
 
-O participante decidiu cada etapa e corrigiu o rumo quando a IA se perdeu em refino antes de ter uma execução completa (decisões D-10 e D-11 do diário).
+  Os agentes de teste detectaram tudo, e a v2 corrigiu.
+- **Exemplo contraditório na regra 409 ou 422 (ainda na v2):** a IA listou "prazo" como 422, mas o teste de decisão que ela mesma escreveu leva a 409 quando o prazo depende de dado guardado. Quatro agentes apontaram e resolveram de forma consistente. É a próxima correção.
+- **Pedido de teste com contradição:** o P04, escrito pela IA, tinha regras de saldo contraditórias. O agente resolveu com premissa e teste.
+- **Comportamento dos agentes:** horários do log estimados e arquivos temporários fora da pasta de trabalho. A v2 passou a mandar ler o relógio por comando e proibiu escrever fora da pasta. Ainda houve horários de fim corrigidos pelos próprios agentes.
+
+O participante decidiu cada etapa. Também corrigiu o rumo quando a IA se perdeu em refino antes de ter uma execução completa (D-10 e D-11 do diário) e quando o pacote não tinha resposta para pedidos em partes (D-19).

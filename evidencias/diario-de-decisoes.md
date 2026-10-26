@@ -199,7 +199,21 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[IA]** Esclareceu que os 25 minutos são a construção completa do zero, mas reconheceu a lacuna: o pacote não tinha caminho para mudança incremental. Propôs a skill `evolucao`.
 - **[IA]** Escreveu `skills/evolucao/SKILL.md`, pensada para velocidade: lê só PRD, SPEC e os arquivos tocados; reaproveita o `.venv`; PRD e SPEC por delta com numeração continuada; testes da mudança antes do código; suíte inteira contra regressão; verificação HTTP; bloco no `evidencias/log-evolucao.md` com horários reais. A `fabrica` passou a desviar para a `evolucao` quando já existe `gerado/docs/PRD.md`.
 - **[IA]** Iniciou o teste às 08:00 sobre o sistema P02 da rodada 02, com uma mensagem de mudança em linguagem natural (editar despesa pendente e contagem por categoria no resumo).
-- **[D]** Resultado e tempo em análise. *(Pendente)*
+- **[IA]** Resultado: 5 min 7 s (08:00:56 a 08:06:03), 9 códigos novos, 11 testes da mudança falhando antes do código, 92 testes passando depois, 15/15 critérios via HTTP, nenhum teste antigo alterado. Evidência em `evidencias/testes-pacote/evolucao/`.
+- **[D]** Skill `evolucao` mantida no pacote. *(Decidido por: participante)*
+
+## D-20 · Revisão do README
+
+- **[P]** Pediu para repassar o README depois da evolução.
+- **[IA]** Revisão crítica com 7 pontos, aplicados:
+  - declarar que o prompt da banca foi enviado com notas de ambiente;
+  - declarar que a instalação em `.claude/skills/` não foi testada;
+  - incluir a `evolucao` e o tempo medido;
+  - declarar os bônus, inclusive o não feito (dois agentes);
+  - encurtar o texto;
+  - comandos para Windows e Linux;
+  - avisar que `verificar_ca.py` reescreve a evidência.
+- **[D]** README final aguardando leitura do participante. *(Pendente)*
 
 ---
 
