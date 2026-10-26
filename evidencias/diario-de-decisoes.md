@@ -230,6 +230,12 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
 - **[P]** Apontou que o diagrama mostrava 6 etapas e não deixava claro quais eram as 8 skills. Também pediu o README em primeira pessoa ("eu decidi", não "o participante decidiu"), porque o README é dele.
 - **[IA]** Trocou o diagrama, que também transbordava a largura no GitHub, por uma tabela com as 8 skills, o fluxo de cada uma e a saída. Passou para primeira pessoa os trechos que falavam do participante em terceira pessoa. As mudanças foram para a branch `entrega-ajustes` e o PR #2.
 
+## D-23 · Resultado do teste com o Codex
+
+- **[P]** Decidiu esperar o Codex terminar e incluir o resultado no PR #2 antes do merge.
+- **[IA]** O Codex rodou das 08:19:32 às 08:37:41 (18 min): 6/6 gates, 32/32 testes (conferidos de forma independente), 11/11 critérios via HTTP, sem ajuste manual e com o prompt da banca puro. A IA registrou uma diferença em relação ao Claude Code: menos testes (32 contra 89). Também registrou que o cancelamento de reserva passada saiu como 422, contra 409 no Claude Code, consequência do exemplo contraditório E-10. Evidência em `evidencias/testes-pacote/codex/`. README atualizado: bônus "dois agentes" feito.
+- **[D]** Resultado incluído no PR #2. *(Decidido por: participante)*
+
 ---
 
 ## Onde a IA errou ou foi imprecisa

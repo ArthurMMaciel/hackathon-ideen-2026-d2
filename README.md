@@ -97,6 +97,7 @@ Tudo o que não é o pacote (`skills/`) nem o sistema gerado (`gerado/`) está e
 | Diário das minhas decisões com a IA | [`diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
 | Generalização em 6 pedidos, 2 rodadas | [`testes-pacote/`](evidencias/testes-pacote/) |
 | Teste da evolução (5 min 7 s) | [`testes-pacote/evolucao/`](evidencias/testes-pacote/evolucao/) |
+| Teste com outro agente (Codex) | [`testes-pacote/codex/`](evidencias/testes-pacote/codex/) |
 
 **Agente e modelo:** Claude Code com `claude-opus-5-5`, em subagentes com contexto limpo, numa pasta só com as skills e o pedido. **O prompt da banca foi enviado acompanhado de notas de ambiente:**
 - trabalhar só naquela pasta;
@@ -122,7 +123,7 @@ A rodada 01 passou em tudo, mas os relatos dos agentes mostraram 18 problemas na
 **Bônus do desafio:**
 - Resultado de testes e scans: feito.
 - Skill dedicada à segurança: feito.
-- Pacote rodado em dois agentes diferentes: **não feito**. Só Claude Code foi testado.
+- Pacote rodado em dois agentes diferentes: **feito**. O Codex CLI rodou o pedido de treino com as mesmas skills e o prompt da banca, sem nenhuma alteração: 6/6 gates, 32/32 testes e 10/10 critérios via HTTP, em 18 minutos ([comparação](evidencias/testes-pacote/codex/)). Ele escreveu menos testes que o Claude Code (32 contra 89) e escolheu outro status num caso ambíguo da regra 409 ou 422.
 
 ## 5. Onde a IA errou e como corrigi
 
