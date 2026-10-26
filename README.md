@@ -37,7 +37,7 @@ Diferenciais:
 1. Crie uma pasta com `PEDIDO.md` (por exemplo, uma cópia de `PEDIDO-TREINO.md`) e as pastas vazias `gerado/` e `evidencias/`.
 2. Disponibilize as skills mantendo as pastas lado a lado, porque elas se referenciam por caminho relativo (`../concepcao/SKILL.md`):
    - **Forma testada:** copie `skills/` para dentro da pasta do pedido.
-   - **Forma não testada:** instalar como skills do agente (no Claude Code, copiar o conteúdo de `skills/` para `.claude/skills/`). Deve funcionar pelas referências relativas, mas não foi verificada.
+   - **Instalada como skills do agente** (no Claude Code, copiar o conteúdo de `skills/` para `.claude/skills/`): verificação estática feita nesse layout. As 8 skills têm frontmatter válido, com nome igual ao da pasta e descrição, e as 14 referências relativas entre skills resolvem para arquivos existentes. A descoberta pelo CLI em execução não foi testada, porque o CLI desta máquina não estava logado no momento do teste.
 3. Abra o agente na pasta e use o prompt da banca:
 
    > Usando as skills disponíveis, construa o sistema descrito em PEDIDO.md dentro da pasta gerado/. Siga todas as etapas das skills até o sistema rodar e os critérios de aceite serem verificados.
