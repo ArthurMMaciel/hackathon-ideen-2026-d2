@@ -6,21 +6,22 @@ Cada pessoa conduz o agente de IA do seu jeito, e não existe um processo reapro
 
 ## 2. O que eu fiz
 
-Um pacote de 8 skills (`SKILL.md`) com dois fluxos.
+Um pacote de 8 skills (`SKILL.md`): uma orquestradora, seis etapas e uma de evolução.
 
-**Construção do zero:** de um pedido completo até o sistema verificado, sem intervenção humana, com um gate verificável entre as etapas.
+| Skill | Fluxo | O que faz | Saída |
+|---|---|---|---|
+| `fabrica` | ambos | Orquestra as etapas, mantém o log, confere cada gate e desvia para `evolucao` quando o sistema já existe | `evidencias/log-execucao.md` |
+| `concepcao` | construção, etapa 1 | Pedido → PRD com RF, RN, premissas, fora de escopo e CA | `gerado/docs/PRD.md` |
+| `especificacao` | construção, etapa 2 | PRD → contrato dos endpoints, DDL e plano de testes | `gerado/docs/SPEC.md` |
+| `construcao` | construção, etapa 3 | Testes primeiro e depois o código, sobre o modelo de projeto testado | `gerado/` |
+| `revisao` | construção, etapa 4 | Revisão de qualidade com sondas de valores extremos | `evidencias/revisao.md` |
+| `revisao-seguranca` | construção, etapa 5 | Injeção, XSS, validação, segredos e `pip-audit` | `evidencias/seguranca.md` |
+| `verificacao` | construção, etapa 6 | Instalação limpa e cada CA executado via HTTP no servidor real | `evidencias/criterios-aceite.md` |
+| `evolucao` | evolução | Mudança incremental sem refazer o sistema | `evidencias/log-evolucao.md` |
 
-```
-PEDIDO.md → fabrica (orquestra, log, gates)
-  1 concepcao          → gerado/docs/PRD.md   (RF, RN, premissas, fora de escopo, CA)
-  2 especificacao      → gerado/docs/SPEC.md  (DDL, contrato dos endpoints, plano de testes)
-  3 construcao         → código + testes      (testes primeiro, sobre um modelo de projeto testado)
-  4 revisao            → evidencias/revisao.md
-  5 revisao-seguranca  → evidencias/seguranca.md
-  6 verificacao        → evidencias/criterios-aceite.md (cada CA executado via HTTP no servidor real)
-```
+**Construção do zero (cerca de 23 minutos):** a partir de um pedido completo, a `fabrica` passa pelas seis etapas, sem intervenção humana, com um gate verificável entre elas.
 
-**Evolução:** quando o sistema já existe e o usuário pede uma mudança ("agora quero editar..."), a `fabrica` desvia para a skill `evolucao`. Ela atualiza PRD e SPEC só no que muda, escreve os testes da mudança antes do código, roda a suíte inteira contra regressão e verifica via HTTP, em cerca de 5 minutos.
+**Evolução (cerca de 5 minutos):** quando o sistema já existe e chega um pedido de mudança ("agora quero editar..."), a `evolucao` atualiza PRD e SPEC só no que muda. Ela escreve os testes da mudança antes do código, roda a suíte inteira contra regressão e verifica via HTTP.
 
 Diferenciais:
 
@@ -36,7 +37,7 @@ Diferenciais:
 1. Crie uma pasta com `PEDIDO.md` (por exemplo, uma cópia de `PEDIDO-TREINO.md`) e as pastas vazias `gerado/` e `evidencias/`.
 2. Disponibilize as skills mantendo as pastas lado a lado, porque elas se referenciam por caminho relativo (`../concepcao/SKILL.md`):
    - **Forma testada:** copie `skills/` para dentro da pasta do pedido.
-   - **Forma não testada:** instalar como skills do agente (no Claude Code, copiar o conteúdo de `skills/` para `.claude/skills/`). Deve funcionar pelas referências relativas, mas não foi verificada.
+   - **Instalada como skills do agente** (no Claude Code, copiar o conteúdo de `skills/` para `.claude/skills/`): testada. O Claude Code CLI descobriu as 8 skills, escolheu a `fabrica` para o pedido e resolveu os caminhos relativos entre skills ([teste](evidencias/testes-pacote/instalacao-claude-skills.md)). Nesse layout testei a descoberta e a leitura; a construção completa rodou com as skills dentro da pasta.
 3. Abra o agente na pasta e use o prompt da banca:
 
    > Usando as skills disponíveis, construa o sistema descrito em PEDIDO.md dentro da pasta gerado/. Siga todas as etapas das skills até o sistema rodar e os critérios de aceite serem verificados.
@@ -93,9 +94,10 @@ Tudo o que não é o pacote (`skills/`) nem o sistema gerado (`gerado/`) está e
 | Critérios de aceite via HTTP: 10/10, mais a tela | [`criterios-aceite.md`](evidencias/criterios-aceite.md) |
 | Subida com relógio real (API, tela, docs) | [`subida-manual.md`](evidencias/subida-manual.md) |
 | Revisões de qualidade e de segurança | [`revisao.md`](evidencias/revisao.md), [`seguranca.md`](evidencias/seguranca.md) |
-| Diário de decisões participante × IA | [`diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
+| Diário das minhas decisões com a IA | [`diario-de-decisoes.md`](evidencias/diario-de-decisoes.md) |
 | Generalização em 6 pedidos, 2 rodadas | [`testes-pacote/`](evidencias/testes-pacote/) |
 | Teste da evolução (5 min 7 s) | [`testes-pacote/evolucao/`](evidencias/testes-pacote/evolucao/) |
+| Teste com outro agente (Codex) | [`testes-pacote/codex/`](evidencias/testes-pacote/codex/) |
 
 **Agente e modelo:** Claude Code com `claude-opus-5-5`, em subagentes com contexto limpo, numa pasta só com as skills e o pedido. **O prompt da banca foi enviado acompanhado de notas de ambiente:**
 - trabalhar só naquela pasta;
@@ -121,7 +123,7 @@ A rodada 01 passou em tudo, mas os relatos dos agentes mostraram 18 problemas na
 **Bônus do desafio:**
 - Resultado de testes e scans: feito.
 - Skill dedicada à segurança: feito.
-- Pacote rodado em dois agentes diferentes: **não feito**. Só Claude Code foi testado.
+- Pacote rodado em dois agentes diferentes: **feito**. O Codex CLI rodou o pedido de treino com as mesmas skills e o prompt da banca, sem nenhuma alteração: 6/6 gates, 32/32 testes e 10/10 critérios via HTTP, em 18 minutos ([comparação](evidencias/testes-pacote/codex/)). Ele escreveu menos testes que o Claude Code (32 contra 89) e escolheu outro status num caso ambíguo da regra 409 ou 422.
 
 ## 5. Onde a IA errou e como corrigi
 
@@ -139,4 +141,4 @@ Registro completo no [diário de decisões](evidencias/diario-de-decisoes.md), t
 - **Pedido de teste com contradição:** o P04, escrito pela IA, tinha regras de saldo contraditórias. O agente resolveu com premissa e teste.
 - **Comportamento dos agentes:** horários do log estimados e arquivos temporários fora da pasta de trabalho. A v2 passou a mandar ler o relógio por comando e proibiu escrever fora da pasta. Ainda houve horários de fim corrigidos pelos próprios agentes.
 
-O participante decidiu cada etapa. Também corrigiu o rumo quando a IA se perdeu em refino antes de ter uma execução completa (D-10 e D-11 do diário) e quando o pacote não tinha resposta para pedidos em partes (D-19).
+Eu decidi cada etapa. Também corrigi o rumo quando a IA se perdeu em refino antes de ter uma execução completa (D-10 e D-11 do diário) e quando o pacote não tinha resposta para pedidos em partes (D-19).
