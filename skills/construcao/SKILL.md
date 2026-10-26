@@ -24,7 +24,7 @@ Leia antes: `../fabrica/referencias/regras-transversais.md`, `../fabrica/referen
 6. **Concorrência.** Toda escrita que depende de uma leitura (conferir conflito e inserir, conferir status e mudar) roda dentro de `with banco.transacao(conn):`.
 7. **Tela.** Substitua o conteúdo de `<main>` em `app/estatico/index.html` conforme a seção Tela da SPEC, mantendo o CSS e as funções prontas (`api`, `mostrarMensagem`, `lerFormulario`, `desenharTabela`). Use `<section>` por bloco e `<form>` com `name` nos campos. Mostre dados só por `textContent` ou `desenharTabela`. Mostre sucesso e erro com `mostrarMensagem`. Troque o título "Sistema gerado" pelo nome do sistema.
 8. **Verificação via HTTP.** Em `verificacao/verificar_ca.py`, escreva um bloco por `CA-xx`: requisições reais contra `servidor(...)` e `v.registrar(...)` com `resumo(resposta, <campos conferidos>)`, para a evidência mostrar o que prova o critério. Para cenários em que o tempo precisa passar, abra outro `servidor` com `APP_AGORA` posterior e o mesmo banco. Pode rodar o script como ensaio; a etapa de verificação roda de novo e sobrescreve a evidência.
-9. **README do sistema.** Escreva `gerado/README.md`: o que faz, comandos de instalar, testar, rodar e verificar, e o endereço da tela.
+9. **README do sistema.** Escreva `gerado/README.md`: o que faz, comandos de instalar, testar, rodar e verificar em três blocos separados (Windows, Linux e macOS, com `python3` nos dois últimos) e o endereço da tela.
 10. **Confira o gate.**
 
 ## Quando um teste não passa

@@ -213,6 +213,8 @@ Registro cronológico de como a IA foi usada no planejamento e na implementaçã
   - encurtar o texto;
   - comandos para Windows e Linux;
   - avisar que `verificar_ca.py` reescreve a evidência.
+- **[P]** Pediu comandos para Windows, Linux e macOS.
+- **[IA]** README com três blocos de comandos (`python3` no Linux e no macOS, mais as dicas de instalação). As skills `fabrica`, `stack-padrao` e `construcao` passaram a prever `python3` e a exigir os três blocos no `gerado/README.md` dos próximos sistemas. O `gerado/README.md` atual não foi editado, para manter "nenhum ajuste manual" no sistema gerado; o README da raiz cobre os três sistemas.
 - **[D]** README final aguardando leitura do participante. *(Pendente)*
 
 ---

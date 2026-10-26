@@ -47,20 +47,41 @@ Requisitos: Python 3.11+ e internet para o `pip`. Construção do zero: cerca de
 
 ### Rodar o sistema gerado do pedido de treino
 
-Em `gerado/`:
+Rode os comandos a partir de `gerado/`. Depois de subir o servidor, abra `http://localhost:8000/`. O script de verificação reescreve `evidencias/criterios-aceite.md`.
 
-```bash
+**Windows (PowerShell ou cmd)**
+
+```powershell
 python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pytest -q
+.venv\Scripts\python verificacao\verificar_ca.py
+.venv\Scripts\python -m uvicorn app.main:app --port 8000
 ```
 
-Depois, com `PY` sendo `.venv\Scripts\python` no Windows ou `.venv/bin/python` no Linux e no macOS:
+**Linux**
 
-| Ação | Comando |
-|---|---|
-| Instalar | `PY -m pip install -r requirements.txt` |
-| Testar | `PY -m pytest -q` |
-| Verificar critérios via HTTP | `PY verificacao/verificar_ca.py` (reescreve `evidencias/criterios-aceite.md`) |
-| Rodar | `PY -m uvicorn app.main:app --port 8000` e abrir `http://localhost:8000/` |
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pytest -q
+.venv/bin/python verificacao/verificar_ca.py
+.venv/bin/python -m uvicorn app.main:app --port 8000
+```
+
+No Debian e no Ubuntu, se o `venv` faltar: `sudo apt install python3-venv`.
+
+**macOS**
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pytest -q
+.venv/bin/python verificacao/verificar_ca.py
+.venv/bin/python -m uvicorn app.main:app --port 8000
+```
+
+Se o `python3` não existir, instale com `brew install python@3.11` ou pelo instalador de python.org.
 
 ## 4. Evidências
 

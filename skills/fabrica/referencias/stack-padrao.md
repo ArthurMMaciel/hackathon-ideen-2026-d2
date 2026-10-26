@@ -52,7 +52,7 @@ gerado/
 
 ## Comandos
 
-Rode a partir de `gerado/`. No Windows o Python do ambiente fica em `.venv/Scripts/python`; no Linux e no macOS, em `.venv/bin/python`. Abaixo, `PY` é esse caminho.
+Rode a partir de `gerado/`. No Windows o Python do ambiente fica em `.venv/Scripts/python`; no Linux e no macOS, em `.venv/bin/python`. Abaixo, `PY` é esse caminho. Para criar o ambiente, use `python` no Windows e `python3` no Linux e no macOS, onde `python` costuma não existir. O `gerado/README.md` traz os comandos separados para Windows, Linux e macOS.
 
 | Ação | Comando |
 |---|---|
